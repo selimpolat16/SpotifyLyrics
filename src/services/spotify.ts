@@ -15,7 +15,7 @@ export const getCurrentUserProfile = async () => {
   return response.body
 }
 
-export const getCurrentPlayback = async () => {
+export const getPlaybackState = async () => {
   const response = await spotifyApi.getMyCurrentPlaybackState()
   return response.body
 }
@@ -25,6 +25,7 @@ export const getCurrentTrack = async () => {
   return response.body
 }
 
+// Playback control functions
 export const play = async () => {
   await spotifyApi.play()
 }
@@ -41,25 +42,20 @@ export const previous = async () => {
   await spotifyApi.skipToPrevious()
 }
 
-export const seek = async (position: number) => {
-  await spotifyApi.seek(position)
+export const seek = async (positionMs: number) => {
+  await spotifyApi.seek(positionMs)
 }
 
-export const setVolume = async (volume: number) => {
-  await spotifyApi.setVolume(volume)
+export const setVolume = async (volumePercent: number) => {
+  await spotifyApi.setVolume(volumePercent)
 }
 
 export const setShuffle = async (state: boolean) => {
   await spotifyApi.setShuffle(state)
 }
 
-export const setRepeat = async (state: 'off' | 'track' | 'context') => {
+export const setRepeat = async (state: 'track' | 'context' | 'off') => {
   await spotifyApi.setRepeat(state)
-}
-
-export const getQueue = async () => {
-  const playback = await getCurrentPlayback()
-  return playback?.item ? [playback.item] : []
 }
 
 export default spotifyApi 
