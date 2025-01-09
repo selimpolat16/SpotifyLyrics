@@ -5,8 +5,10 @@ const spotifyApi = new SpotifyWebApi({
 })
 
 let refreshToken: string | null = null
+let accessToken: string | null = null
 
 export const setAccessToken = (token: string) => {
+  accessToken = token
   spotifyApi.setAccessToken(token)
 }
 
@@ -21,133 +23,143 @@ export const refreshAccessToken = async () => {
       throw new Error('No refresh token available')
     }
 
-    // Call our API route to refresh the token
     const response = await fetch('/api/spotify/refresh', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        refresh_token: refreshToken,
-      }),
+      body: JSON.stringify({ refreshToken }),
     })
 
-    const data = await response.json()
-
     if (!response.ok) {
-      const errorMessage = data.details || data.error || 'Failed to refresh token'
-      console.error('Token refresh failed:', errorMessage)
-      throw new Error(errorMessage)
+      throw new Error('Failed to refresh token')
     }
 
-    if (!data.access_token || !data.expires_in) {
-      console.error('Invalid response data:', data)
-      throw new Error('Invalid response from Spotify')
-    }
-
-    const { access_token, expires_in } = data
-    
-    // Update the main API instance with the new access token
-    spotifyApi.setAccessToken(access_token)
-    return { accessToken: access_token, expiresIn: expires_in }
+    const data = await response.json()
+    setAccessToken(data.accessToken)
+    return data
   } catch (error) {
-    console.error('Error refreshing access token:', error)
+    console.error('Error refreshing token:', error)
     throw error
   }
 }
 
-// Wrapper function to handle token refresh
+// Aktif cihazı kontrol et
+export const getActiveDevice = async () => {
+  try {
+    const devices = await spotifyApi.getMyDevices()
+    const activeDevice = devices.body.devices.find(device => device.is_active)
+    return activeDevice || null
+  } catch (error) {
+    console.error('Error getting devices:', error)
+    return null
+  }
+}
+
+// API çağrılarını token yenileme ile sarmalayan yardımcı fonksiyon
 const withTokenRefresh = async <T>(apiCall: () => Promise<T>): Promise<T> => {
   try {
+    // Token yoksa yenile
+    if (!accessToken) {
+      const { accessToken: newToken } = await refreshAccessToken()
+      setAccessToken(newToken)
+    }
     return await apiCall()
-  } catch (error: any) {
-    // Check for various token expiration error patterns
-    const isTokenExpired = 
-      error?.body?.error?.message === 'The access token expired' ||
-      error?.body?.error?.status === 401 ||
-      error?.statusCode === 401
-
-    if (isTokenExpired) {
-      try {
-        await refreshAccessToken()
-        return await apiCall()
-      } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError)
-        throw refreshError
-      }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('The access token expired')) {
+      // Token'ı yenile ve tekrar dene
+      const { accessToken: newToken } = await refreshAccessToken()
+      setAccessToken(newToken)
+      return apiCall()
     }
     throw error
   }
 }
 
-export const getCurrentUserProfile = async () => {
+export const play = async (options?: { uris?: string[] }) => {
   return withTokenRefresh(async () => {
-    const response = await spotifyApi.getMe()
-    return response.body
-  })
-}
+    try {
+      // Önce mevcut cihazları al
+      const devices = await spotifyApi.getMyDevices()
+      console.log('Mevcut cihazlar:', devices.body.devices)
 
-export const getPlaybackState = async () => {
-  return withTokenRefresh(async () => {
-    const response = await spotifyApi.getMyCurrentPlaybackState()
-    return response.body
-  })
-}
+      // Aktif cihazı bul
+      let activeDevice = devices.body.devices.find(device => device.is_active)
+      
+      // Aktif cihaz yoksa ilk cihazı seç ve aktifleştir
+      if (!activeDevice && devices.body.devices.length > 0) {
+        activeDevice = devices.body.devices[0]
+        await spotifyApi.transferMyPlayback([activeDevice.id])
+        // Cihaz değişiminin tamamlanmasını bekle
+        await new Promise(resolve => setTimeout(resolve, 1000))
+      }
 
-export const getCurrentTrack = async () => {
-  return withTokenRefresh(async () => {
-    const response = await spotifyApi.getMyCurrentPlayingTrack()
-    return response.body
-  })
-}
+      if (!activeDevice) {
+        throw new Error('NO_ACTIVE_DEVICE')
+      }
 
-// Playback control functions
-export const play = async () => {
-  return withTokenRefresh(async () => {
-    await spotifyApi.play()
+      // Önce mevcut çalma durumunu kontrol et
+      const playbackState = await spotifyApi.getMyCurrentPlaybackState()
+      
+      // Şarkıyı çal
+      if (options?.uris) {
+        // Eğer farklı bir şarkı çalınacaksa
+        if (!playbackState.body?.item || playbackState.body.item.uri !== options.uris[0]) {
+          await spotifyApi.play({
+            device_id: activeDevice.id,
+            uris: options.uris,
+            position_ms: 0
+          })
+        } else {
+          // Aynı şarkıysa sadece başa sar ve oynat
+          await spotifyApi.seek(0, { device_id: activeDevice.id })
+          if (!playbackState.body.is_playing) {
+            await spotifyApi.play({ device_id: activeDevice.id })
+          }
+        }
+      } else {
+        // Sadece oynat/devam et
+        await spotifyApi.play({ device_id: activeDevice.id })
+      }
+    } catch (error: any) {
+      console.error('Play error:', {
+        message: error.message,
+        statusCode: error.statusCode,
+        body: error.body
+      })
+      throw error
+    }
   })
 }
 
 export const pause = async () => {
   return withTokenRefresh(async () => {
-    await spotifyApi.pause()
-  })
-}
-
-export const next = async () => {
-  return withTokenRefresh(async () => {
-    await spotifyApi.skipToNext()
-  })
-}
-
-export const previous = async () => {
-  return withTokenRefresh(async () => {
-    await spotifyApi.skipToPrevious()
+    const activeDevice = await getActiveDevice()
+    if (!activeDevice) {
+      throw new Error('NO_ACTIVE_DEVICE')
+    }
+    await spotifyApi.pause({ device_id: activeDevice.id })
   })
 }
 
 export const seek = async (positionMs: number) => {
   return withTokenRefresh(async () => {
-    await spotifyApi.seek(positionMs)
+    const activeDevice = await getActiveDevice()
+    if (!activeDevice) {
+      throw new Error('NO_ACTIVE_DEVICE')
+    }
+    await spotifyApi.seek(positionMs, { device_id: activeDevice.id })
   })
 }
 
-export const setVolume = async (volumePercent: number) => {
-  return withTokenRefresh(async () => {
-    await spotifyApi.setVolume(volumePercent)
-  })
-}
-
-export const setShuffle = async (state: boolean) => {
-  return withTokenRefresh(async () => {
-    await spotifyApi.setShuffle(state)
-  })
-}
-
-export const setRepeat = async (state: 'track' | 'context' | 'off') => {
-  return withTokenRefresh(async () => {
-    await spotifyApi.setRepeat(state)
-  })
+export async function getPlaybackState(): Promise<SpotifyApi.CurrentPlaybackResponse | null> {
+  try {
+    const response = await spotifyApi.getMyCurrentPlaybackState()
+    return response.body || null
+  } catch (error) {
+    console.error('Playback state error:', error)
+    return null
+  }
 }
 
 export default spotifyApi 

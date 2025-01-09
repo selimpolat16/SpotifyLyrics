@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useSpotify } from '@/hooks/useSpotify'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import * as spotifyApi from '@/services/spotify'
 import * as lyricsService from '@/services/lyrics'
-import { Search, Plus, Save, Trash, LogOut } from 'lucide-react'
+import { Search, Plus, Save, Trash, LogOut, Play, Pause, Clock } from 'lucide-react'
 import type { SongLyrics, LyricLine } from '@/types/lyrics'
 import { auth } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
@@ -13,7 +13,9 @@ import { useRouter } from 'next/navigation'
 export default function LyricsAdmin() {
   const router = useRouter()
   const { isAuthenticated, isLoading: authLoading } = useAdminAuth()
-  const { accessToken } = useSpotify()
+  const { accessToken, refreshToken, isLoading: spotifyLoading, login: spotifyLogin } = useSpotify()
+  
+  // State tanımlamaları
   const [mounted, setMounted] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentTrack, setCurrentTrack] = useState<SpotifyApi.TrackObjectFull | null>(null)
@@ -21,17 +23,62 @@ export default function LyricsAdmin() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [isCapturing, setIsCapturing] = useState(false)
+  const [playbackState, setPlaybackState] = useState<SpotifyApi.CurrentPlaybackResponse | null>(null)
 
+  // Mount effect
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // Client tarafında render edilene kadar bekle
-  if (!mounted) {
-    return null
-  }
+  // Playback durumunu güncelle
+  useEffect(() => {
+    if (!isCapturing || !currentTrack) return
 
-  // Çıkış yap
+    const updatePlayback = async () => {
+      try {
+        const state = await spotifyApi.getPlaybackState()
+        if (state) {
+          setPlaybackState(state)
+        }
+      } catch (error) {
+        console.error('Playback state error:', error)
+      }
+    }
+
+    updatePlayback()
+    const interval = setInterval(updatePlayback, 500)
+    return () => clearInterval(interval)
+  }, [isCapturing, currentTrack])
+
+  // Klavye kısayolunu dinle
+  useEffect(() => {
+    if (!isCapturing || !playbackState?.is_playing) return
+
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && playbackState.progress_ms !== undefined) {
+        e.preventDefault()
+        const currentTime = playbackState.progress_ms
+        
+        setLyrics(prevLyrics => {
+          if (prevLyrics.length === 0 || prevLyrics[prevLyrics.length - 1].text !== '') {
+            return [...prevLyrics, { time: currentTime, text: '' }] as LyricLine[]
+          } else {
+            const newLyrics = [...prevLyrics]
+            if (newLyrics[newLyrics.length - 1]) {
+              newLyrics[newLyrics.length - 1].time = currentTime
+            }
+            return newLyrics
+          }
+        })
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyPress)
+    return () => window.removeEventListener('keydown', handleKeyPress)
+  }, [isCapturing, playbackState])
+
+  // Handler fonksiyonları
   const handleLogout = async () => {
     try {
       await auth.signOut()
@@ -41,7 +88,6 @@ export default function LyricsAdmin() {
     }
   }
 
-  // Spotify'da şarkı ara
   const searchTrack = async () => {
     if (!searchQuery.trim()) return
 
@@ -59,7 +105,6 @@ export default function LyricsAdmin() {
 
       if (data.tracks.items.length > 0) {
         setCurrentTrack(data.tracks.items[0])
-        // Mevcut sözleri yükle
         const existingLyrics = await lyricsService.getLyricsByTrackId(data.tracks.items[0].id)
         if (existingLyrics) {
           setLyrics(existingLyrics.lyrics)
@@ -77,27 +122,59 @@ export default function LyricsAdmin() {
     }
   }
 
-  // Yeni boş satır ekle
-  const addLine = () => {
-    setLyrics([...lyrics, { time: 0, text: '' }])
-  }
+  const toggleCapture = async () => {
+    if (!currentTrack) return
 
-  // Satır güncelle
-  const updateLine = (index: number, field: keyof LyricLine, value: string | number) => {
-    const newLyrics = [...lyrics]
-    newLyrics[index] = {
-      ...newLyrics[index],
-      [field]: field === 'time' ? parseInt(value as string) || 0 : value
+    try {
+      if (!isCapturing) {
+        console.log('Şarkı başlatılıyor...', {
+          trackUri: currentTrack.uri,
+          accessToken: !!accessToken,
+          refreshToken: !!refreshToken
+        })
+
+        // Şarkıyı çal
+        await spotifyApi.play({ uris: [currentTrack.uri] })
+      } else {
+        await spotifyApi.pause()
+      }
+      setIsCapturing(!isCapturing)
+    } catch (error: any) {
+      console.error('Playback control error:', error)
+      
+      if (error.message === 'NO_ACTIVE_DEVICE') {
+        setError('Aktif bir Spotify cihazı bulunamadı. Lütfen Spotify uygulamasını açın ve bir şarkı çalmaya başlayın.')
+      } else if (error.message === 'PREMIUM_REQUIRED') {
+        setError('Bu özellik sadece Spotify Premium üyeleri için kullanılabilir.')
+      } else if (error.message?.includes('The access token expired')) {
+        setError('Oturum süresi doldu. Lütfen sayfayı yenileyin.')
+      } else if (error.message?.includes('Player command failed')) {
+        setError('Şarkı çalma hatası. Lütfen Spotify uygulamasını yeniden başlatın ve tekrar deneyin.')
+      } else {
+        setError('Şarkı kontrolü sırasında bir hata oluştu: ' + (error.message || 'Bilinmeyen hata'))
+      }
     }
-    setLyrics(newLyrics)
   }
 
-  // Satır sil
+  const addLine = () => {
+    setLyrics(prev => [...prev, { time: 0, text: '' }])
+  }
+
+  const updateLine = (index: number, field: keyof LyricLine, value: string | number) => {
+    setLyrics(prev => {
+      const newLyrics = [...prev]
+      newLyrics[index] = {
+        ...newLyrics[index],
+        [field]: field === 'time' ? parseInt(value as string) || 0 : value
+      }
+      return newLyrics
+    })
+  }
+
   const removeLine = (index: number) => {
-    setLyrics(lyrics.filter((_, i) => i !== index))
+    setLyrics(prev => prev.filter((_, i) => i !== index))
   }
 
-  // Sözleri kaydet
   const saveLyrics = async () => {
     if (!currentTrack) return
 
@@ -110,7 +187,7 @@ export default function LyricsAdmin() {
         id: currentTrack.id,
         name: currentTrack.name,
         artist: currentTrack.artists[0].name,
-        lyrics: lyrics.sort((a, b) => a.time - b.time), // Zamana göre sırala
+        lyrics: lyrics.sort((a, b) => a.time - b.time),
         duration: currentTrack.duration_ms,
         addedAt: new Date().getTime(),
         updatedAt: new Date().getTime(),
@@ -126,8 +203,12 @@ export default function LyricsAdmin() {
     }
   }
 
+  // Client tarafında render edilene kadar bekle
+  if (typeof window === 'undefined') return null
+  if (!mounted) return null
+
   // Yükleniyor durumunda loading göster
-  if (authLoading) {
+  if (authLoading || spotifyLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-lg">Yükleniyor...</div>
@@ -135,11 +216,30 @@ export default function LyricsAdmin() {
     )
   }
 
-  // Giriş yapılmamışsa boş sayfa göster (middleware zaten login'e yönlendirecek)
-  if (!isAuthenticated) {
-    return null
+  // Giriş yapılmamışsa boş sayfa göster
+  if (!isAuthenticated) return null
+
+  // Spotify bağlantısı yoksa login sayfasını göster
+  if (!accessToken || !refreshToken) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <h2 className="text-xl font-semibold">Spotify Bağlantısı Gerekli</h2>
+          <p className="text-muted-foreground">
+            Şarkı sözlerini yönetmek için Spotify hesabınıza bağlanmanız gerekiyor.
+          </p>
+          <button
+            onClick={spotifyLogin}
+            className="px-4 py-2 bg-[#1DB954] text-white rounded-md hover:bg-[#1DB954]/90"
+          >
+            Spotify ile Bağlan
+          </button>
+        </div>
+      </div>
+    )
   }
 
+  // Ana render
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -194,11 +294,33 @@ export default function LyricsAdmin() {
             alt={currentTrack.name}
             className="w-16 h-16 rounded-md"
           />
-          <div>
+          <div className="flex-1">
             <h2 className="font-semibold">{currentTrack.name}</h2>
             <p className="text-muted-foreground">
               {currentTrack.artists.map(a => a.name).join(', ')}
             </p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={toggleCapture}
+              className={`p-2 rounded-md ${
+                isCapturing 
+                  ? 'bg-destructive/10 text-destructive hover:bg-destructive/20' 
+                  : 'bg-primary/10 text-primary hover:bg-primary/20'
+              }`}
+              title={isCapturing ? 'Zaman yakalamayı durdur' : 'Zaman yakalamayı başlat'}
+            >
+              {isCapturing ? <Pause size={20} /> : <Play size={20} />}
+            </button>
+            {isCapturing && (
+              <div className="text-sm text-muted-foreground">
+                <Clock size={16} className="inline mr-1" />
+                {playbackState?.progress_ms 
+                  ? Math.floor(playbackState.progress_ms / 1000) + 's'
+                  : '0s'
+                }
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -207,7 +329,14 @@ export default function LyricsAdmin() {
       {currentTrack && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">Şarkı Sözleri</h3>
+            <h3 className="text-lg font-semibold">
+              Şarkı Sözleri
+              {isCapturing && (
+                <span className="ml-2 text-sm text-muted-foreground">
+                  (Boşluk tuşuna basarak zamanı yakalayın)
+                </span>
+              )}
+            </h3>
             <button
               onClick={addLine}
               className="p-2 text-primary hover:bg-primary/10 rounded-md"
@@ -220,13 +349,9 @@ export default function LyricsAdmin() {
           <div className="space-y-2">
             {lyrics.map((line, index) => (
               <div key={index} className="flex items-center space-x-2">
-                <input
-                  type="number"
-                  value={line.time}
-                  onChange={(e) => updateLine(index, 'time', e.target.value)}
-                  placeholder="Zaman (ms)"
-                  className="w-24 px-2 py-1 bg-card border border-border rounded-md"
-                />
+                <div className="w-24 px-2 py-1 bg-card border border-border rounded-md text-sm">
+                  {Math.floor(line.time / 1000)}s
+                </div>
                 <input
                   type="text"
                   value={line.text}

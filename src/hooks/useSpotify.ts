@@ -1,136 +1,103 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useAuthContext } from '@/components/AuthProvider'
+import { useState, useEffect } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { db } from '@/lib/firebase'
-import spotifyApi, { setAccessToken, setRefreshToken, refreshAccessToken } from '@/services/spotify'
+import { auth, db } from '@/lib/firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import * as spotifyApi from '@/services/spotify'
 
 export function useSpotify() {
-  const { user } = useAuthContext()
-  const [accessToken, setSpotifyAccessToken] = useState<string | null>(null)
-  const [refreshToken, setSpotifyRefreshToken] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [refreshToken, setRefreshToken] = useState<string | null>(null)
   const [expiresAt, setExpiresAt] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Load tokens from Firebase
   useEffect(() => {
-    if (!user) {
-      setLoading(false)
-      return
-    }
-
-    const loadSpotifyTokens = async () => {
-      try {
-        const userDoc = await getDoc(doc(db, 'users', user.uid))
-        const data = userDoc.data()
-
-        if (data?.spotifyAccessToken && data?.spotifyRefreshToken) {
-          setSpotifyAccessToken(data.spotifyAccessToken)
-          setAccessToken(data.spotifyAccessToken)
-          setSpotifyRefreshToken(data.spotifyRefreshToken)
-          setRefreshToken(data.spotifyRefreshToken)
-          setExpiresAt(data.spotifyTokenExpiresAt)
-        }
-      } catch (error) {
-        console.error('Error loading Spotify tokens:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadSpotifyTokens()
-  }, [user])
-
-  // Check token expiry and refresh if needed
-  useEffect(() => {
-    if (typeof window === 'undefined' || !user || !refreshToken || !expiresAt) return
-
-    const refreshTokenIfNeeded = async () => {
-      const timeUntilExpiry = expiresAt - Date.now()
-
-      // Refresh token 5 minutes before expiry
-      if (timeUntilExpiry < 300000) {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
         try {
-          const { accessToken: newAccessToken, expiresIn } = await refreshAccessToken()
-          const newExpiresAt = Date.now() + expiresIn * 1000
-
-          await setDoc(doc(db, 'users', user.uid), {
-            spotifyAccessToken: newAccessToken,
-            spotifyTokenExpiresAt: newExpiresAt,
-          }, { merge: true })
-
-          setSpotifyAccessToken(newAccessToken)
-          setAccessToken(newAccessToken)
-          setExpiresAt(newExpiresAt)
+          // Firestore'dan token'ları al
+          const userDoc = await getDoc(doc(db, 'users', user.uid))
+          if (userDoc.exists()) {
+            const data = userDoc.data()
+            
+            // State'leri güncelle
+            setAccessToken(data.spotifyAccessToken)
+            setRefreshToken(data.spotifyRefreshToken)
+            setExpiresAt(data.spotifyTokenExpiresAt)
+            
+            // Spotify servisine token'ları kaydet
+            if (data.spotifyAccessToken) {
+              spotifyApi.setAccessToken(data.spotifyAccessToken)
+            }
+            if (data.spotifyRefreshToken) {
+              spotifyApi.setRefreshToken(data.spotifyRefreshToken)
+            }
+          }
         } catch (error) {
-          console.error('Error refreshing token:', error)
+          console.error('Error loading Spotify tokens:', error)
         }
+      } else {
+        setAccessToken(null)
+        setRefreshToken(null)
+        setExpiresAt(null)
       }
-    }
+      setIsLoading(false)
+    })
 
-    refreshTokenIfNeeded()
-    const interval = setInterval(refreshTokenIfNeeded, 60000) // Check every minute
-
-    return () => clearInterval(interval)
-  }, [user, refreshToken, expiresAt])
+    return () => unsubscribe()
+  }, [])
 
   const saveTokens = async (accessToken: string, refreshToken: string, expiresIn: number) => {
+    const user = auth.currentUser
     if (!user) return
 
-    // Use useEffect for time-based operations
     const expiresAt = Date.now() + expiresIn * 1000
 
     try {
+      // Firestore'a kaydet
       await setDoc(doc(db, 'users', user.uid), {
         spotifyAccessToken: accessToken,
         spotifyRefreshToken: refreshToken,
         spotifyTokenExpiresAt: expiresAt,
       }, { merge: true })
 
-      setSpotifyAccessToken(accessToken)
+      // State'leri güncelle
       setAccessToken(accessToken)
-      setSpotifyRefreshToken(refreshToken)
       setRefreshToken(refreshToken)
       setExpiresAt(expiresAt)
+
+      // Spotify servisine kaydet
+      spotifyApi.setAccessToken(accessToken)
+      spotifyApi.setRefreshToken(refreshToken)
     } catch (error) {
-      console.error('Error saving Spotify tokens:', error)
+      console.error('Error saving tokens:', error)
       throw error
     }
   }
 
   const login = () => {
-    if (typeof window === 'undefined') return
-
     const scope = [
       'streaming',
       'user-read-email',
       'user-read-private',
-      'user-library-read',
-      'user-library-modify',
       'user-read-playback-state',
       'user-modify-playback-state',
-      'user-read-currently-playing',
-      'user-read-recently-played',
     ].join(' ')
 
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!,
       scope,
-      redirect_uri: process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI!,
-      state: user?.uid || 'anonymous',
+      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/spotify`,
+      state: auth.currentUser?.uid || 'anonymous',
     })
 
-    window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`
+    // Client tarafında olduğumuzdan emin ol
+    if (typeof window !== 'undefined') {
+      window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`
+    }
   }
 
-  return {
-    accessToken,
-    refreshToken,
-    expiresAt,
-    loading,
-    login,
-    saveTokens,
-  }
+  return { accessToken, refreshToken, expiresAt, isLoading, login, saveTokens }
 } 

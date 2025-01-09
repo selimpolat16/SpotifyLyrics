@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
+import { useRouter } from 'next/navigation'
 
 export default function AdminLogin() {
   const router = useRouter()
@@ -18,44 +18,17 @@ export default function AdminLogin() {
     setIsLoading(true)
 
     try {
-      console.log('Giriş denemesi:', email) // Debug log
+      console.log('Giriş denemesi:', { email, password: '***' }) // Debug log
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       console.log('Giriş başarılı:', userCredential.user.email) // Debug log
-
-      // Firebase token'ı cookie'ye kaydet
-      const idToken = await userCredential.user.getIdToken()
-      document.cookie = `auth_token=${idToken}; path=/;`
-
-      // Admin kontrolü
-      if (userCredential.user.email?.endsWith('@admin.com')) {
-        console.log('Admin girişi onaylandı') // Debug log
-        router.push('/admin/lyrics')
-      } else {
-        console.log('Admin değil:', userCredential.user.email) // Debug log
-        await auth.signOut()
-        setError('Bu hesap admin yetkisine sahip değil.')
-      }
-    } catch (error) {
-      console.error('Login error:', error) // Detaylı hata logu
-      
-      // Firebase hata mesajlarını Türkçeleştir
-      if (error instanceof Error) {
-        switch (error.message) {
-          case 'Firebase: Error (auth/invalid-email).':
-            setError('Geçersiz email adresi.')
-            break
-          case 'Firebase: Error (auth/user-not-found).':
-            setError('Kullanıcı bulunamadı.')
-            break
-          case 'Firebase: Error (auth/wrong-password).':
-            setError('Hatalı şifre.')
-            break
-          default:
-            setError('Giriş başarısız. ' + error.message)
-        }
-      } else {
-        setError('Beklenmeyen bir hata oluştu.')
-      }
+      router.push('/admin/lyrics')
+    } catch (error: any) {
+      console.error('Giriş hatası:', error.code, error.message) // Debug log
+      setError(
+        error.code === 'auth/invalid-credential'
+          ? 'E-posta veya şifre hatalı'
+          : 'Giriş yapılırken bir hata oluştu'
+      )
     } finally {
       setIsLoading(false)
     }
@@ -63,26 +36,20 @@ export default function AdminLogin() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="w-full max-w-md p-6 bg-card rounded-lg shadow-lg">
-        <h1 className="text-2xl font-bold mb-6 text-center">Admin Girişi</h1>
-
-        {error && (
-          <div className="p-4 mb-4 bg-destructive/10 text-destructive rounded-md">
-            {error}
-          </div>
-        )}
-
+      <div className="w-full max-w-md p-6 space-y-6 bg-card rounded-lg shadow-lg">
+        <h1 className="text-2xl font-bold text-center">Admin Girişi</h1>
+        
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label htmlFor="email" className="block text-sm font-medium mb-1">
-              Email
+              E-posta
             </label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-2 rounded-md bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 rounded-md bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               required
             />
           </div>
@@ -96,10 +63,16 @@ export default function AdminLogin() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-2 rounded-md bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full px-3 py-2 rounded-md bg-background border border-border focus:outline-none focus:ring-2 focus:ring-primary"
               required
             />
           </div>
+
+          {error && (
+            <div className="p-3 text-sm bg-destructive/10 text-destructive rounded-md">
+              {error}
+            </div>
+          )}
 
           <button
             type="submit"
