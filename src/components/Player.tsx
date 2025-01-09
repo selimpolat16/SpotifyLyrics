@@ -133,91 +133,111 @@ export default function Player({ onTrackChange }: PlayerProps) {
   if (!currentTrack?.item) return null
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-border p-4">
-      <div className="container mx-auto flex items-center justify-between">
+    <div className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-lg border-t border-border">
+      <div className="container mx-auto h-20 flex items-center justify-between px-4">
         {/* Track Info */}
-        <div className="flex items-center space-x-4">
-          <div className="relative w-16 h-16">
+        <div className="flex items-center space-x-4 w-1/4">
+          <div className="relative w-14 h-14 rounded-md overflow-hidden">
             <Image
               src={currentTrack.item.album.images[0]?.url || '/placeholder.png'}
               alt={currentTrack.item.name}
               fill
-              className="object-cover rounded-md"
+              className="object-cover"
             />
           </div>
-          <div>
-            <h3 className="font-semibold">{currentTrack.item.name}</h3>
-            <p className="text-sm text-muted-foreground">
+          <div className="min-w-0">
+            <h3 className="font-medium text-sm truncate">{currentTrack.item.name}</h3>
+            <p className="text-xs text-muted-foreground truncate">
               {currentTrack.item.artists.map(artist => artist.name).join(', ')}
             </p>
           </div>
         </div>
 
         {/* Playback Controls */}
-        <div className="flex flex-col items-center space-y-2">
+        <div className="flex flex-col items-center space-y-2 w-2/4">
           <div className="flex items-center space-x-4">
             <button
               onClick={handleShuffle}
-              className={`p-2 rounded-full ${shuffle ? 'text-primary' : 'text-muted-foreground'}`}
+              className={`p-2 rounded-full hover:text-white transition-colors ${
+                shuffle ? 'text-primary' : 'text-muted-foreground'
+              }`}
             >
-              <Shuffle size={20} />
+              <Shuffle size={18} />
             </button>
             <button
               onClick={handlePrevious}
-              className="p-2 rounded-full hover:bg-accent"
+              className="p-2 rounded-full hover:text-white transition-colors text-muted-foreground"
             >
-              <SkipBack size={24} />
+              <SkipBack size={22} />
             </button>
             <button
               onClick={handlePlayPause}
-              className="p-3 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+              className="p-2 rounded-full bg-white text-black hover:scale-105 transition-transform"
             >
-              {isPlaying ? <Pause size={24} /> : <Play size={24} />}
+              {isPlaying ? <Pause size={22} /> : <Play size={22} />}
             </button>
             <button
               onClick={handleNext}
-              className="p-2 rounded-full hover:bg-accent"
+              className="p-2 rounded-full hover:text-white transition-colors text-muted-foreground"
             >
-              <SkipForward size={24} />
+              <SkipForward size={22} />
             </button>
             <button
               onClick={handleRepeat}
-              className={`p-2 rounded-full ${repeat !== 'off' ? 'text-primary' : 'text-muted-foreground'}`}
+              className={`p-2 rounded-full hover:text-white transition-colors ${
+                repeat !== 'off' ? 'text-primary' : 'text-muted-foreground'
+              }`}
             >
-              <Repeat size={20} />
+              <Repeat size={18} />
             </button>
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full max-w-md flex items-center space-x-2">
-            <span className="text-sm text-muted-foreground">
+          <div className="w-full flex items-center space-x-2 px-4">
+            <span className="text-xs text-muted-foreground w-10 text-right">
               {formatTime(progress)}
             </span>
-            <input
-              type="range"
-              min={0}
-              max={duration}
-              value={progress}
-              onChange={handleSeek}
-              className="flex-1"
-            />
-            <span className="text-sm text-muted-foreground">
+            <div className="relative flex-1 h-1 group">
+              <input
+                type="range"
+                min={0}
+                max={duration}
+                value={progress}
+                onChange={handleSeek}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+              <div className="absolute inset-0 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full bg-white group-hover:bg-primary transition-colors"
+                  style={{ width: `${(progress / duration) * 100}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-xs text-muted-foreground w-10">
               {formatTime(duration)}
             </span>
           </div>
         </div>
 
         {/* Volume Control */}
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-2 w-1/4 justify-end">
           <Volume2 size={20} className="text-muted-foreground" />
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={volume}
-            onChange={handleVolumeChange}
-            className="w-24"
-          />
+          <div className="relative w-24 h-1 group">
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={volume}
+              onChange={handleVolumeChange}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+            />
+            <div className="absolute inset-0 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full bg-muted-foreground group-hover:bg-white transition-colors"
+                style={{ width: `${volume}%` }}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>
