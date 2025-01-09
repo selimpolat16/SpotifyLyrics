@@ -4,15 +4,16 @@ import { useEffect, useState } from 'react'
 import { useAuthContext } from '@/components/AuthProvider'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
-import spotifyApi, { setAccessToken } from '@/services/spotify'
+import spotifyApi, { setAccessToken, setRefreshToken, refreshAccessToken } from '@/services/spotify'
 
 export function useSpotify() {
   const { user } = useAuthContext()
   const [accessToken, setSpotifyAccessToken] = useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = useState<string | null>(null)
+  const [refreshToken, setSpotifyRefreshToken] = useState<string | null>(null)
   const [expiresAt, setExpiresAt] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Load tokens from Firebase
   useEffect(() => {
     if (!user) {
       setLoading(false)
@@ -24,9 +25,10 @@ export function useSpotify() {
         const userDoc = await getDoc(doc(db, 'users', user.uid))
         const data = userDoc.data()
 
-        if (data?.spotifyAccessToken) {
+        if (data?.spotifyAccessToken && data?.spotifyRefreshToken) {
           setSpotifyAccessToken(data.spotifyAccessToken)
           setAccessToken(data.spotifyAccessToken)
+          setSpotifyRefreshToken(data.spotifyRefreshToken)
           setRefreshToken(data.spotifyRefreshToken)
           setExpiresAt(data.spotifyTokenExpiresAt)
         }
@@ -40,9 +42,43 @@ export function useSpotify() {
     loadSpotifyTokens()
   }, [user])
 
+  // Check token expiry and refresh if needed
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user || !refreshToken || !expiresAt) return
+
+    const refreshTokenIfNeeded = async () => {
+      const timeUntilExpiry = expiresAt - Date.now()
+
+      // Refresh token 5 minutes before expiry
+      if (timeUntilExpiry < 300000) {
+        try {
+          const { accessToken: newAccessToken, expiresIn } = await refreshAccessToken()
+          const newExpiresAt = Date.now() + expiresIn * 1000
+
+          await setDoc(doc(db, 'users', user.uid), {
+            spotifyAccessToken: newAccessToken,
+            spotifyTokenExpiresAt: newExpiresAt,
+          }, { merge: true })
+
+          setSpotifyAccessToken(newAccessToken)
+          setAccessToken(newAccessToken)
+          setExpiresAt(newExpiresAt)
+        } catch (error) {
+          console.error('Error refreshing token:', error)
+        }
+      }
+    }
+
+    refreshTokenIfNeeded()
+    const interval = setInterval(refreshTokenIfNeeded, 60000) // Check every minute
+
+    return () => clearInterval(interval)
+  }, [user, refreshToken, expiresAt])
+
   const saveTokens = async (accessToken: string, refreshToken: string, expiresIn: number) => {
     if (!user) return
 
+    // Use useEffect for time-based operations
     const expiresAt = Date.now() + expiresIn * 1000
 
     try {
@@ -54,6 +90,7 @@ export function useSpotify() {
 
       setSpotifyAccessToken(accessToken)
       setAccessToken(accessToken)
+      setSpotifyRefreshToken(refreshToken)
       setRefreshToken(refreshToken)
       setExpiresAt(expiresAt)
     } catch (error) {
@@ -63,6 +100,8 @@ export function useSpotify() {
   }
 
   const login = () => {
+    if (typeof window === 'undefined') return
+
     const scope = [
       'streaming',
       'user-read-email',
