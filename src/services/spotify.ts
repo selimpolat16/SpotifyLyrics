@@ -123,7 +123,7 @@ export async function getAudioFeatures(trackId: string) {
     // Hata detaylarını logla
     console.error('[spotify] Audio features error:', errorInfo)
 
-    // Özel hata mesajları
+    // Özel hata mesajlar
     if (errorInfo.statusCode === 401) {
       throw new Error('Oturum süresi doldu, lütfen yeniden giriş yapın')
     } else if (errorInfo.statusCode === 403) {
