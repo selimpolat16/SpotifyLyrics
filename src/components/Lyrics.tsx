@@ -51,7 +51,7 @@ const animationStyles = {
 
 // GSAP ease değerleri
 const gsapEase = {
-  smooth: "none"
+  smooth: "power2.out"
 }
 
 // Font seçenekleri
@@ -376,7 +376,7 @@ const LyricsComponent = () => {
           y: 0, 
           opacity: 1, 
           duration: 0.3,
-          ease: gsapEase.elastic
+          ease: gsapEase.smooth
         }
       )
 
@@ -386,7 +386,7 @@ const LyricsComponent = () => {
           scale: 1,
           opacity: 1,
           duration: 0.3,
-          ease: gsapEase.elastic
+          ease: gsapEase.smooth
         }
       )
     }
@@ -399,7 +399,7 @@ const LyricsComponent = () => {
           y: 0,
           opacity: 1,
           duration: 0.3,
-          ease: gsapEase.back
+          ease: gsapEase.smooth
         }
       )
     }
