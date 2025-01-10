@@ -18,7 +18,18 @@ export function useSpotify() {
   const login = useCallback((isAdmin = false) => {
     if (!isMounted) return
 
-    const scope = 'user-read-playback-state user-modify-playback-state'
+    const scope = [
+      'user-read-playback-state',
+      'user-modify-playback-state',
+      'user-read-currently-playing',
+      'streaming',
+      'user-read-email',
+      'user-read-private',
+      'user-library-read',
+      'user-top-read',
+      'user-read-recently-played'
+    ].join(' ')
+
     const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
     const redirectUri = isAdmin 
       ? process.env.NEXT_PUBLIC_SPOTIFY_ADMIN_REDIRECT_URI 

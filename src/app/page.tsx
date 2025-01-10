@@ -3,21 +3,25 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useSpotify } from '@/hooks/useSpotify'
-import Lyrics from '@/components/Lyrics'
+import dynamic from 'next/dynamic'
+
+// Client-side only import
+const Lyrics = dynamic(() => import('@/components/Lyrics'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-screen bg-black/90">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1DB954]"></div>
+    </div>
+  )
+})
 
 export default function Home() {
   const { accessToken, refreshToken, isLoading: spotifyLoading, login: spotifyLogin, saveTokens } = useSpotify()
   const searchParams = useSearchParams()
-  const [isMounted, setIsMounted] = useState(false)
-
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
+  const [isReady, setIsReady] = useState(false)
 
   // Token'ları URL'den yakala
   useEffect(() => {
-    if (!isMounted) return
-
     const accessToken = searchParams.get('access_token')
     const refreshToken = searchParams.get('refresh_token')
     const expiresIn = searchParams.get('expires_in')
@@ -31,9 +35,11 @@ export default function Home() {
     if (accessToken && refreshToken && expiresIn) {
       saveTokens(accessToken, refreshToken, parseInt(expiresIn))
     }
-  }, [searchParams, saveTokens, isMounted])
 
-  if (!isMounted || spotifyLoading) {
+    setIsReady(true)
+  }, [searchParams, saveTokens])
+
+  if (!isReady || spotifyLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#1DB954]"></div>
@@ -62,9 +68,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-black">
-      <div className="container mx-auto p-4">
-        <Lyrics />
-      </div>
+      <Lyrics />
     </main>
   )
 }

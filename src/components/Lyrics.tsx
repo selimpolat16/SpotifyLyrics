@@ -9,8 +9,115 @@ import type { LyricLine } from '@/types/lyrics'
 import { FastAverageColor } from 'fast-average-color'
 import dynamic from 'next/dynamic'
 
+// Animasyon stilleri
+const animationStyles = {
+  fade: {
+    initial: { opacity: 0.5, y: 20 },
+    animate: (isCurrentLine: boolean) => ({ 
+      opacity: isCurrentLine ? 1 : 0.5,
+      y: 0,
+      scale: isCurrentLine ? 1.05 : 1
+    }),
+    transition: { 
+      duration: 0.5,
+      scale: {
+        type: "spring",
+        stiffness: 200,
+        damping: 15
+      }
+    }
+  },
+  slide: {
+    initial: { opacity: 0.5, x: -50 },
+    animate: (isCurrentLine: boolean) => ({ 
+      opacity: isCurrentLine ? 1 : 0.5,
+      x: 0,
+      scale: isCurrentLine ? 1.05 : 1
+    }),
+    transition: { 
+      duration: 0.5,
+      scale: {
+        type: "spring",
+        stiffness: 200,
+        damping: 15
+      }
+    }
+  },
+  pop: {
+    initial: { opacity: 0.5, scale: 0.9 },
+    animate: (isCurrentLine: boolean) => ({ 
+      opacity: isCurrentLine ? 1 : 0.5,
+      scale: isCurrentLine ? 1.1 : 1
+    }),
+    transition: { 
+      type: "spring",
+      stiffness: 400,
+      damping: 25
+    }
+  }
+}
+
+// Font seçenekleri
+const fontOptions = [
+  { name: 'Default', value: 'font-sans' },
+  { name: 'Serif', value: 'font-serif' },
+  { name: 'Mono', value: 'font-mono' },
+  { name: 'Cursive', value: 'font-dancing' },
+]
+
+// Şarkı özelliklerine göre stil seçimi
+const getStylesFromTrackInfo = (trackName: string, artistName: string) => {
+  const text = (trackName + ' ' + artistName).toLowerCase()
+  
+  // Dans/parti şarkıları için
+  const danceKeywords = ['dance', 'party', 'club', 'disco', 'remix', 'dj']
+  const energeticKeywords = ['rock', 'metal', 'punk', 'power', 'fast', 'beat']
+  const happyKeywords = ['happy', 'joy', 'love', 'fun', 'smile', 'good']
+  const sadKeywords = ['sad', 'alone', 'cry', 'tears', 'pain', 'heart']
+  const instrumentalKeywords = ['instrumental', 'classic', 'piano', 'acoustic', 'ambient']
+
+  // Dans veya enerjik şarkılar için pop animasyonu
+  if (danceKeywords.some(keyword => text.includes(keyword)) || 
+      energeticKeywords.some(keyword => text.includes(keyword))) {
+    return {
+      animation: 'pop' as const,
+      font: fontOptions[0]
+    }
+  }
+
+  // Mutlu şarkılar için cursive font ve slide animasyonu
+  if (happyKeywords.some(keyword => text.includes(keyword))) {
+    return {
+      animation: 'slide' as const,
+      font: fontOptions[3] // Cursive font
+    }
+  }
+
+  // Hüzünlü şarkılar için serif font
+  if (sadKeywords.some(keyword => text.includes(keyword))) {
+    return {
+      animation: 'fade' as const,
+      font: fontOptions[1] // Serif font
+    }
+  }
+
+  // Enstrümantal şarkılar için mono font
+  if (instrumentalKeywords.some(keyword => text.includes(keyword))) {
+    return {
+      animation: 'fade' as const,
+      font: fontOptions[2] // Mono font
+    }
+  }
+
+  // Varsayılan stiller
+  return {
+    animation: 'fade' as const,
+    font: fontOptions[0]
+  }
+}
+
 // Client-side only component
-const Lyrics = () => {
+const LyricsComponent = () => {
   const { accessToken, refreshAccessToken } = useSpotify()
   const [currentTrack, setCurrentTrack] = useState<SpotifyApi.TrackObjectFull | null>(null)
   const [lyrics, setLyrics] = useState<LyricLine[]>([])
@@ -20,16 +127,20 @@ const Lyrics = () => {
   const [error, setError] = useState<string | null>(null)
   const [isMounted, setIsMounted] = useState(false)
   const [backgroundColor, setBackgroundColor] = useState('rgb(0, 0, 0)')
+  const [showZoomedCover, setShowZoomedCover] = useState(false)
+  const [selectedFont, setSelectedFont] = useState(fontOptions[0])
+  const [selectedAnimation, setSelectedAnimation] = useState<keyof typeof animationStyles>('fade')
   const lyricsRef = useRef<HTMLDivElement>(null)
   const [fac, setFac] = useState<FastAverageColor | null>(null)
 
   // Client-side mount kontrolü
   useEffect(() => {
     setIsMounted(true)
-    setFac(new FastAverageColor())
+    const facInstance = new FastAverageColor()
+    setFac(facInstance)
     return () => {
+      facInstance.destroy()
       setIsMounted(false)
-      fac?.destroy()
     }
   }, [])
 
@@ -98,11 +209,9 @@ const Lyrics = () => {
       if (songLyrics) {
         setLyrics(songLyrics.lyrics)
       } else {
-        setError('Bu şarkı için sözler mevcut değil')
         setLyrics([])
       }
     } catch (error) {
-      setError('Şarkı sözleri yüklenirken bir hata oluştu')
       setLyrics([])
     } finally {
       setIsLoading(false)
@@ -112,6 +221,23 @@ const Lyrics = () => {
   // Mevcut zamanı takip et ve uygun lyrics satırını bul
   useEffect(() => {
     if (!lyrics.length) return
+
+    // Şu anki zamanla eşleşen satırı bul
+    const findCurrentLine = (lyrics: LyricLine[], currentTime: number): LyricLine | null => {
+      if (!lyrics.length) return null
+
+      // Şu anki zamandan küçük veya eşit olan en son satırı bul
+      let currentLine = lyrics[0]
+      for (const line of lyrics) {
+        if (line.time <= currentTime) {
+          currentLine = line
+        } else {
+          break
+        }
+      }
+
+      return currentLine
+    }
 
     const currentLine = findCurrentLine(lyrics, progress)
     if (currentLine) {
@@ -138,98 +264,92 @@ const Lyrics = () => {
     }
   }, [progress, lyrics])
 
-  // Şu anki zamanla eşleşen satırı bul
-  const findCurrentLine = (lyrics: LyricLine[], currentTime: number): LyricLine | null => {
-    if (!lyrics.length) return null
-
-    // Şu anki zamandan küçük veya eşit olan en son satırı bul
-    let currentLine = lyrics[0]
-    for (const line of lyrics) {
-      if (line.time <= currentTime) {
-        currentLine = line
-      } else {
-        break
-      }
-    }
-
-    return currentLine
-  }
-
-  // Albüm kapağından renk çıkar
+  // Şarkı değiştiğinde stilleri güncelle
   useEffect(() => {
-    if (currentTrack?.album.images[0]?.url) {
-      fac?.getColorAsync(currentTrack.album.images[0].url, {
-        algorithm: 'dominant',
-        defaultColor: [0, 0, 0, 255],
-      })
-        .then((color: { value: [number, number, number, number] }) => {
-          // Ana rengi daha canlı yapmak için saturasyonu artır
-          const [r, g, b] = color.value;
-          const [h, s, l] = rgbToHsl(r, g, b);
-          const [newR, newG, newB] = hslToRgb(h, Math.min(s * 1.2, 1), Math.min(l * 1.1, 0.8));
-          
-          setBackgroundColor(`rgba(${newR}, ${newG}, ${newB}, 0.3)`)
+    if (!currentTrack) return
+
+    const styles = getStylesFromTrackInfo(
+      currentTrack.name,
+      currentTrack.artists.map(a => a.name).join(' ')
+    )
+    
+    console.log('Stiller hesaplandı:', {
+      trackName: currentTrack.name,
+      artists: currentTrack.artists.map(a => a.name).join(', '),
+      styles
+    })
+
+    setSelectedAnimation(styles.animation)
+    setSelectedFont(styles.font)
+  }, [currentTrack?.id, currentTrack?.name])
+
+  // Albüm kapağından renk çıkar - sadece client-side'da çalışsın ve memoize et
+  const albumImageUrl = currentTrack?.album.images[0]?.url
+  useEffect(() => {
+    if (!isMounted || !fac || !albumImageUrl) {
+      console.log('Renk hesaplama başlatılamadı:', { isMounted, hasFac: !!fac, albumImageUrl })
+      setBackgroundColor('rgb(0, 0, 0)')
+      return
+    }
+
+    let isCurrentRequest = true
+
+    const getColor = async () => {
+      console.log('Renk hesaplama başlatıldı:', { albumImageUrl })
+      
+      try {
+        // Proxy kullanmadan doğrudan resmi yükle
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        
+        // Resmi yükle
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => resolve()
+          img.onerror = () => reject(new Error('Resim yüklenemedi'))
+          img.src = albumImageUrl
         })
-        .catch(() => {
+
+        if (!isCurrentRequest) {
+          console.log('İstek iptal edildi')
+          return
+        }
+
+        // Renk hesapla
+        const color = await fac.getColorAsync(img, {
+          algorithm: 'dominant',
+          defaultColor: [0, 0, 0, 255],
+          crossOrigin: 'anonymous'
+        })
+
+        if (!isCurrentRequest) {
+          console.log('İstek iptal edildi')
+          return
+        }
+
+        // Rengi daha yumuşak hale getir
+        const [r, g, b] = color.value
+        setBackgroundColor(`rgba(${r}, ${g}, ${b}, 0.2)`)
+        console.log('Arka plan rengi güncellendi:', { r, g, b })
+      } catch (error) {
+        console.error('Renk hesaplama hatası:', {
+          error,
+          message: error instanceof Error ? error.message : 'Bilinmeyen hata',
+          albumImageUrl
+        })
+
+        if (isCurrentRequest) {
           setBackgroundColor('rgb(0, 0, 0)')
-        })
-    }
-  }, [currentTrack])
-
-  // RGB'den HSL'ye dönüşüm
-  const rgbToHsl = (r: number, g: number, b: number): [number, number, number] => {
-    r /= 255;
-    g /= 255;
-    b /= 255;
-
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    let h = 0, s, l = (max + min) / 2;
-
-    if (max === min) {
-      h = s = 0;
-    } else {
-      const d = max - min;
-      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-
-      switch (max) {
-        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-        case g: h = (b - r) / d + 2; break;
-        case b: h = (r - g) / d + 4; break;
+        }
       }
-
-      h /= 6;
     }
 
-    return [h, s, l];
-  }
+    getColor()
 
-  // HSL'den RGB'ye dönüşüm
-  const hslToRgb = (h: number, s: number, l: number): [number, number, number] => {
-    let r, g, b;
-
-    if (s === 0) {
-      r = g = b = l;
-    } else {
-      const hue2rgb = (p: number, q: number, t: number) => {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-      }
-
-      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-      const p = 2 * l - q;
-
-      r = hue2rgb(p, q, h + 1/3);
-      g = hue2rgb(p, q, h);
-      b = hue2rgb(p, q, h - 1/3);
+    return () => {
+      console.log('Renk hesaplama temizleniyor')
+      isCurrentRequest = false
     }
-
-    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-  }
+  }, [albumImageUrl, fac, isMounted])
 
   // Tıklama işleyicisi
   const handleSeek = async (time: number) => {
@@ -242,17 +362,19 @@ const Lyrics = () => {
     }
   }
 
+  // Loading state for initial render
   if (!isMounted) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-black">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1DB954]"></div>
-      </div>
-    )
+    return null // Return null initially to prevent hydration mismatch
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black text-white/60">
+      <div 
+        className="flex items-center justify-center h-screen text-white/60 transition-colors duration-1000 ease-in-out"
+        style={{ 
+          background: `linear-gradient(to bottom, ${backgroundColor}, rgba(0, 0, 0, 0.95))`,
+        }}
+      >
         {error}
       </div>
     )
@@ -260,8 +382,39 @@ const Lyrics = () => {
 
   if (!lyrics.length) {
     return (
-      <div className="flex items-center justify-center h-screen bg-black text-white/60">
-        Bu şarkı için sözler mevcut değil
+      <div 
+        className="flex items-center justify-center h-screen text-white transition-colors duration-1000 ease-in-out"
+        style={{ 
+          background: `linear-gradient(to bottom, ${backgroundColor}, rgba(0, 0, 0, 0.95))`,
+        }}
+      >
+        {currentTrack && (
+          <div className="text-center max-w-lg mx-auto p-6">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center gap-6"
+            >
+              <motion.img
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 15 }}
+                src={currentTrack.album.images[0]?.url}
+                alt={currentTrack.name}
+                className="w-64 h-64 rounded-lg shadow-lg cursor-pointer hover:opacity-80 transition-opacity"
+                onClick={() => setShowZoomedCover(true)}
+              />
+              <div className="space-y-4">
+                <h2 className="text-2xl font-bold">{currentTrack.name}</h2>
+                <p className="text-white/60">{currentTrack.artists.map(a => a.name).join(', ')}</p>
+                <div className="backdrop-blur-lg bg-black/20 p-4 rounded-lg mt-4">
+                  <p className="text-lg">Şarkı bulunamadı</p>
+                  <p className="text-sm text-white/60 mt-2">Bu şarkı için henüz sözler eklenmemiş</p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     )
   }
@@ -273,6 +426,7 @@ const Lyrics = () => {
         background: `linear-gradient(to bottom, ${backgroundColor}, rgba(0, 0, 0, 0.95))`,
       }}
     >
+      {/* Ayarlar Paneli */}
       {/* Şarkı Bilgisi */}
       {currentTrack && (
         <motion.div 
@@ -287,7 +441,8 @@ const Lyrics = () => {
               transition={{ type: "spring", stiffness: 200, damping: 15 }}
               src={currentTrack.album.images[0]?.url}
               alt={currentTrack.name}
-              className="w-16 h-16 rounded-lg shadow-lg"
+              className="w-16 h-16 rounded-lg shadow-lg cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={() => setShowZoomedCover(true)}
             />
             <div>
               <motion.h2 
@@ -310,6 +465,29 @@ const Lyrics = () => {
         </motion.div>
       )}
 
+      {/* Büyütülmüş Albüm Kapağı */}
+      <AnimatePresence>
+        {showZoomedCover && currentTrack && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center"
+            onClick={() => setShowZoomedCover(false)}
+          >
+            <motion.img
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.8 }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              src={currentTrack.album.images[0]?.url}
+              alt={currentTrack.name}
+              className="max-w-[80vw] max-h-[80vh] rounded-lg shadow-2xl"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Sözler */}
       <div 
         className="fixed inset-0 top-24 bottom-0 overflow-y-auto scrollbar-hide"
@@ -318,28 +496,19 @@ const Lyrics = () => {
           ref={lyricsRef}
           className="container mx-auto px-4 py-4"
         >
-          <div className="max-w-2xl mx-auto space-y-8">
+          <div className={`max-w-2xl mx-auto space-y-8 ${selectedFont.value}`}>
             <AnimatePresence>
               {lyrics.map((line) => {
                 const isCurrentLine = currentLine?.time === line.time
+                const animation = animationStyles[selectedAnimation]
+                
                 return (
                   <motion.div
                     key={line.time}
                     id={`line-${line.time}`}
-                    initial={{ opacity: 0.5, y: 20 }}
-                    animate={{ 
-                      opacity: isCurrentLine ? 1 : 0.5,
-                      y: 0,
-                      scale: isCurrentLine ? 1.05 : 1
-                    }}
-                    transition={{ 
-                      duration: 0.5,
-                      scale: {
-                        type: "spring",
-                        stiffness: 200,
-                        damping: 15
-                      }
-                    }}
+                    initial={animation.initial}
+                    animate={animation.animate(isCurrentLine)}
+                    transition={animation.transition}
                     onClick={() => handleSeek(line.time)}
                     className={`text-center text-2xl transition-all backdrop-blur-sm rounded-lg p-2 cursor-pointer hover:bg-white/5 ${
                       isCurrentLine
@@ -359,7 +528,14 @@ const Lyrics = () => {
   )
 }
 
-// Client-side only export
-export default dynamic(() => Promise.resolve(Lyrics), {
-  ssr: false
-}) 
+// Client-side only export with loading state
+const Lyrics = dynamic(() => Promise.resolve(LyricsComponent), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center h-screen bg-black/90">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1DB954]"></div>
+    </div>
+  )
+})
+
+export default Lyrics 
