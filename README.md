@@ -6,7 +6,11 @@ Spotify'da çalan şarkıların sözlerini gerçek zamanlı görüntüleyen bir 
 
 - Spotify hesabı ile giriş yapma
 - Çalan şarkının sözlerini gerçek zamanlı görüntüleme
-- Şarkı kontrolü (oynat/duraklat, ileri/geri, ses seviyesi)
+- Şarkı kontrolü  (Spotify Premium gerektirir)
+ - Oynat/Duraklat
+  - İleri/Geri
+  - Ses seviyesi kontrolü
+  - Shuffle ve tekrar modu
 - Admin paneli ile şarkı sözü yönetimi
 - Responsive tasarım
 
