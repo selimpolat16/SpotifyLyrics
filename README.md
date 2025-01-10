@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Spotify Lyrics
 
-## Getting Started
+Spotify'da çalan şarkıların sözlerini gerçek zamanlı görüntüleyen bir web uygulaması.
 
-First, run the development server:
+## 🌟 Özellikler
 
+- Spotify hesabı ile giriş yapma
+- Çalan şarkının sözlerini gerçek zamanlı görüntüleme
+- Şarkı kontrolü  (Spotify Premium gerektirir)
+ - Oynat/Duraklat
+  - İleri/Geri
+  - Ses seviyesi kontrolü
+  - Shuffle ve tekrar modu
+- Admin paneli ile şarkı sözü yönetimi
+- Responsive tasarım
+
+## 🚀 Demo
+
+[https://spotify-lyrics-rose.vercel.app/](https://spotify-lyrics-rose.vercel.app/)
+
+## 🛠️ Teknolojiler
+
+- Next.js 13 (App Router)
+- TypeScript
+- Tailwind CSS
+- Firebase
+- Spotify Web API
+- Vercel
+
+## 💻 Kurulum
+
+1. Repoyu klonlayın:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/yourusername/spotify-lyrics.git
+cd spotify-lyrics
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Bağımlılıkları yükleyin:
+```bash
+cd frontend
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. `.env.local` dosyasını oluşturun:
+```env
+NEXT_PUBLIC_SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+NEXT_PUBLIC_SPOTIFY_REDIRECT_URI=http://localhost:3000/callback
+NEXT_PUBLIC_SPOTIFY_ADMIN_REDIRECT_URI=http://localhost:3000/admin/callback
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Firebase config
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_firebase_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_firebase_storage_bucket
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
 
-## Learn More
+# Firebase Admin SDK
+FIREBASE_CLIENT_EMAIL=your_firebase_client_email
+FIREBASE_PRIVATE_KEY=your_firebase_private_key
+```
 
-To learn more about Next.js, take a look at the following resources:
+4. Geliştirme sunucusunu başlatın:
+```bash
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📝 Kullanım
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Ana sayfada "Spotify ile Bağlan" butonuna tıklayın
+2. Spotify hesabınızla giriş yapın
+3. Spotify'da bir şarkı çalmaya başlayın
+4. Şarkı sözleri otomatik olarak görüntülenecektir
 
-## Deploy on Vercel
+### Admin Paneli
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. `/admin/lyrics` adresine gidin
+2. Admin hesabınızla giriş yapın
+3. Şarkı sözlerini ekleyin veya düzenleyin
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 📄 Lisans
+
+MIT
+
+
