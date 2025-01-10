@@ -227,4 +227,20 @@ export async function setRepeat(state: 'off' | 'track' | 'context') {
     })
     throw new Error(`Set repeat hatası: ${errorMessage}`)
   }
+}
+
+export async function getCurrentUserProfile() {
+  try {
+    const api = ensureSpotifyApi()
+    const response = await api.getMe()
+    return response.body
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Get user profile error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Get user profile hatası: ${errorMessage}`)
+  }
 } 
