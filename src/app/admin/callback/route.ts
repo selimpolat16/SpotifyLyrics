@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 
 const SPOTIFY_CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET
-const REDIRECT_URI = process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI
+const REDIRECT_URI = process.env.NEXT_PUBLIC_SPOTIFY_ADMIN_REDIRECT_URI
 
 export async function GET(request: Request) {
   const url = new URL(request.url)
@@ -10,11 +10,11 @@ export async function GET(request: Request) {
   const error = url.searchParams.get('error')
 
   if (error) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=${error}`)
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/admin/lyrics?error=${error}`)
   }
 
   if (!code) {
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=missing_code`)
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/admin/lyrics?error=missing_code`)
   }
 
   try {
@@ -37,12 +37,11 @@ export async function GET(request: Request) {
 
     const data = await response.json()
 
-    // Ana sayfaya yönlendir ve token'ları URL parametresi olarak ekle
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}?access_token=${data.access_token}&refresh_token=${data.refresh_token}&expires_in=${data.expires_in}`
+      `${process.env.NEXT_PUBLIC_APP_URL}/admin/lyrics?access_token=${data.access_token}&refresh_token=${data.refresh_token}&expires_in=${data.expires_in}`
     )
   } catch (error) {
     console.error('Token exchange error:', error)
-    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}?error=token_exchange_failed`)
+    return NextResponse.redirect(`${process.env.NEXT_PUBLIC_APP_URL}/admin/lyrics?error=token_exchange_failed`)
   }
 } 

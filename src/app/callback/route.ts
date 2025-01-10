@@ -37,7 +37,6 @@ export async function GET(request: Request) {
 
     const data = await response.json()
 
-    // Ana sayfaya yönlendir ve token'ları URL parametresi olarak ekle
     return NextResponse.redirect(
       `${process.env.NEXT_PUBLIC_APP_URL}?access_token=${data.access_token}&refresh_token=${data.refresh_token}&expires_in=${data.expires_in}`
     )

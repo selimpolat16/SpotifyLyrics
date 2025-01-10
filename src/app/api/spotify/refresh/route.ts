@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
-import SpotifyWebApi from 'spotify-web-api-node'
 
-const spotifyApi = new SpotifyWebApi({
-  clientId: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID,
-  clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
-})
+const SPOTIFY_CLIENT_ID = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
+const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET
 
 export async function POST(request: Request) {
   try {
@@ -14,18 +11,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Refresh token is required' }, { status: 400 })
     }
 
-    spotifyApi.setRefreshToken(refreshToken)
-    const data = await spotifyApi.refreshAccessToken()
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${Buffer.from(`${SPOTIFY_CLIENT_ID}:${SPOTIFY_CLIENT_SECRET}`).toString('base64')}`,
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to refresh token')
+    }
+
+    const data = await response.json()
 
     return NextResponse.json({
-      accessToken: data.body.access_token,
-      expiresIn: data.body.expires_in,
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token,
+      expiresIn: data.expires_in,
     })
   } catch (error) {
     console.error('Token refresh error:', error)
-    return NextResponse.json(
-      { error: 'Failed to refresh token', details: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to refresh token' }, { status: 500 })
   }
 } 

@@ -5,10 +5,11 @@ import { useSpotify } from '@/hooks/useSpotify'
 import { useAdminAuth } from '@/hooks/useAdminAuth'
 import * as spotifyApi from '@/services/spotify'
 import * as lyricsService from '@/services/lyrics'
-import { Search, Plus, Save, Trash, LogOut, Play, Pause, Clock } from 'lucide-react'
+import { Search, Plus, Save, Trash, LogOut, Play, Pause, Clock, Undo2, Redo2, GripVertical } from 'lucide-react'
 import type { SongLyrics, LyricLine } from '@/types/lyrics'
 import { auth } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
+import { useLyrics } from '@/hooks/useLyrics'
 
 export default function LyricsAdmin() {
   const router = useRouter()
@@ -16,20 +17,31 @@ export default function LyricsAdmin() {
   const { accessToken, refreshToken, isLoading: spotifyLoading, login: spotifyLogin } = useSpotify()
   
   // State tanımlamaları
-  const [mounted, setMounted] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentTrack, setCurrentTrack] = useState<SpotifyApi.TrackObjectFull | null>(null)
-  const [lyrics, setLyrics] = useState<LyricLine[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [isCapturing, setIsCapturing] = useState(false)
   const [playbackState, setPlaybackState] = useState<SpotifyApi.CurrentPlaybackResponse | null>(null)
 
-  // Mount effect
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  const {
+    lyrics: lyricsState,
+    canUndo,
+    canRedo,
+    hasUnsavedChanges,
+    setLyrics: setLyricsState,
+    updateLyrics: updateLyricsState,
+    addLine: addLineState,
+    updateLine: updateLineState,
+    removeLine: removeLineState,
+    reorderLines,
+    bulkAddLines,
+    undo,
+    redo,
+    markAsChanged,
+    markAsSaved,
+  } = useLyrics()
 
   // Playback durumunu güncelle
   useEffect(() => {
@@ -58,25 +70,21 @@ export default function LyricsAdmin() {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.code === 'Space' && playbackState.progress_ms !== undefined) {
         e.preventDefault()
-        const currentTime = playbackState.progress_ms
+        const currentTime = playbackState.progress_ms || 0
         
-        setLyrics(prevLyrics => {
-          if (prevLyrics.length === 0 || prevLyrics[prevLyrics.length - 1].text !== '') {
-            return [...prevLyrics, { time: currentTime, text: '' }] as LyricLine[]
-          } else {
-            const newLyrics = [...prevLyrics]
-            if (newLyrics[newLyrics.length - 1]) {
-              newLyrics[newLyrics.length - 1].time = currentTime
-            }
-            return newLyrics
-          }
-        })
+        // Redux state'i güncellemek için updateLineState kullanıyoruz
+        const emptyLineIndex = lyricsState.findIndex(line => line.time === 0)
+        if (emptyLineIndex !== -1) {
+          const line = lyricsState[emptyLineIndex]
+          updateLineState(emptyLineIndex, { ...line, time: currentTime })
+          markAsChanged()
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyPress)
     return () => window.removeEventListener('keydown', handleKeyPress)
-  }, [isCapturing, playbackState])
+  }, [isCapturing, playbackState, lyricsState, updateLineState, markAsChanged])
 
   // Handler fonksiyonları
   const handleLogout = async () => {
@@ -107,9 +115,9 @@ export default function LyricsAdmin() {
         setCurrentTrack(data.tracks.items[0])
         const existingLyrics = await lyricsService.getLyricsByTrackId(data.tracks.items[0].id)
         if (existingLyrics) {
-          setLyrics(existingLyrics.lyrics)
+          setLyricsState(existingLyrics.lyrics)
         } else {
-          setLyrics([])
+          setLyricsState([])
         }
       } else {
         setError('Şarkı bulunamadı')
@@ -156,25 +164,51 @@ export default function LyricsAdmin() {
     }
   }
 
-  const addLine = () => {
-    setLyrics(prev => [...prev, { time: 0, text: '' }])
+  const addMultipleLines = () => {
+    const newLines = Array(5).fill(null).map(() => ({ time: 0, text: '' }))
+    bulkAddLines(newLines)
+    markAsChanged()
   }
 
-  const updateLine = (index: number, field: keyof LyricLine, value: string | number) => {
-    setLyrics(prev => {
-      const newLyrics = [...prev]
-      newLyrics[index] = {
-        ...newLyrics[index],
-        [field]: field === 'time' ? parseInt(value as string) || 0 : value
-      }
-      return newLyrics
-    })
+  // Handle paste event for bulk line addition
+  const handlePaste = useCallback((e: ClipboardEvent) => {
+    const text = e.clipboardData?.getData('text')
+    if (!text) return
+
+    const lines = text.split('\n').filter(line => line.trim())
+    const newLines = lines.map(text => ({
+      time: 0,
+      text: text.trim(),
+    }))
+
+    bulkAddLines(newLines)
+    markAsChanged()
+  }, [bulkAddLines, markAsChanged])
+
+  // Add paste event listener
+  useEffect(() => {
+    document.addEventListener('paste', handlePaste)
+    return () => document.removeEventListener('paste', handlePaste)
+  }, [handlePaste])
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData('text/plain', index.toString())
   }
 
-  const removeLine = (index: number) => {
-    setLyrics(prev => prev.filter((_, i) => i !== index))
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
   }
 
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault()
+    const sourceIndex = parseInt(e.dataTransfer.getData('text/plain'))
+    if (sourceIndex === targetIndex) return
+    reorderLines(sourceIndex, targetIndex)
+    markAsChanged()
+  }
+
+  // Save lyrics
   const saveLyrics = async () => {
     if (!currentTrack) return
 
@@ -187,13 +221,14 @@ export default function LyricsAdmin() {
         id: currentTrack.id,
         name: currentTrack.name,
         artist: currentTrack.artists[0].name,
-        lyrics: lyrics.sort((a, b) => a.time - b.time),
+        lyrics: [...lyricsState].sort((a, b) => a.time - b.time),
         duration: currentTrack.duration_ms,
         addedAt: new Date().getTime(),
         updatedAt: new Date().getTime(),
       }
 
       await lyricsService.saveLyrics(songLyrics)
+      markAsSaved()
       setSuccess('Şarkı sözleri başarıyla kaydedildi')
     } catch (error) {
       console.error('Save error:', error)
@@ -203,9 +238,11 @@ export default function LyricsAdmin() {
     }
   }
 
-  // Client tarafında render edilene kadar bekle
-  if (typeof window === 'undefined') return null
-  if (!mounted) return null
+  // Add single line
+  const addLine = () => {
+    addLineState({ time: 0, text: '' })
+    markAsChanged()
+  }
 
   // Yükleniyor durumunda loading göster
   if (authLoading || spotifyLoading) {
@@ -229,8 +266,8 @@ export default function LyricsAdmin() {
             Şarkı sözlerini yönetmek için Spotify hesabınıza bağlanmanız gerekiyor.
           </p>
           <button
-            onClick={spotifyLogin}
-            className="px-4 py-2 bg-[#1DB954] text-white rounded-md hover:bg-[#1DB954]/90"
+            onClick={() => spotifyLogin(true)}
+            className="px-8 py-3 bg-[#1DB954] text-white rounded-full hover:bg-[#1DB954]/90 font-semibold text-lg"
           >
             Spotify ile Bağlan
           </button>
@@ -329,39 +366,85 @@ export default function LyricsAdmin() {
       {currentTrack && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">
-            <h3 className="text-lg font-semibold">
-              Şarkı Sözleri
-              {isCapturing && (
-                <span className="ml-2 text-sm text-muted-foreground">
-                  (Boşluk tuşuna basarak zamanı yakalayın)
-                </span>
-              )}
-            </h3>
-            <button
-              onClick={addLine}
-              className="p-2 text-primary hover:bg-primary/10 rounded-md"
-              title="Yeni satır ekle"
-            >
-              <Plus size={20} />
-            </button>
+            <div className="flex items-center space-x-4">
+              <h3 className="text-lg font-semibold">
+                Şarkı Sözleri
+                {isCapturing && (
+                  <span className="ml-2 text-sm text-muted-foreground">
+                    (Boşluk tuşuna basarak zamanı yakalayın)
+                  </span>
+                )}
+              </h3>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={undo}
+                  disabled={!canUndo}
+                  className="p-2 text-primary hover:bg-primary/10 rounded-md disabled:opacity-50"
+                  title="Geri Al (Ctrl+Z)"
+                >
+                  <Undo2 size={16} />
+                </button>
+                <button
+                  onClick={redo}
+                  disabled={!canRedo}
+                  className="p-2 text-primary hover:bg-primary/10 rounded-md disabled:opacity-50"
+                  title="İleri Al (Ctrl+Shift+Z)"
+                >
+                  <Redo2 size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={addMultipleLines}
+                className="p-2 text-primary hover:bg-primary/10 rounded-md flex items-center space-x-1"
+                title="5 satır ekle"
+              >
+                <Plus size={20} />
+                <span>5 Satır Ekle</span>
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2">
-            {lyrics.map((line, index) => (
-              <div key={index} className="flex items-center space-x-2">
-                <div className="w-24 px-2 py-1 bg-card border border-border rounded-md text-sm">
-                  {Math.floor(line.time / 1000)}s
+            {lyricsState.map((line: LyricLine, index: number) => (
+              <div
+                key={`${line.time}-${index}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={handleDragOver}
+                onDrop={(e) => handleDrop(e, index)}
+                className="flex items-center space-x-2 group bg-card hover:bg-card/80 rounded-md p-1"
+              >
+                <div 
+                  className="p-2 cursor-move text-muted-foreground hover:text-foreground"
+                  title="Sürükle ve bırak"
+                >
+                  <GripVertical size={16} />
+                </div>
+                <div className="flex items-center space-x-1">
+                  <input
+                    type="number"
+                    value={Math.floor(line.time / 1000)}
+                    onChange={(e) => updateLineState(index, { ...line, time: parseInt(e.target.value) * 1000 })}
+                    className="w-16 px-2 py-1 bg-card border border-border rounded-l-md text-sm"
+                    min="0"
+                    step="1"
+                  />
+                  <span className="px-2 py-1 bg-card border border-border rounded-r-md text-sm text-muted-foreground">
+                    s
+                  </span>
                 </div>
                 <input
                   type="text"
                   value={line.text}
-                  onChange={(e) => updateLine(index, 'text', e.target.value)}
+                  onChange={(e) => updateLineState(index, { ...line, text: e.target.value })}
                   placeholder="Şarkı sözü..."
                   className="flex-1 px-2 py-1 bg-card border border-border rounded-md"
                 />
                 <button
-                  onClick={() => removeLine(index)}
-                  className="p-2 text-destructive hover:bg-destructive/10 rounded-md"
+                  onClick={() => removeLineState(index)}
+                  className="p-2 text-destructive hover:bg-destructive/10 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
                   title="Satırı sil"
                 >
                   <Trash size={16} />
@@ -373,7 +456,7 @@ export default function LyricsAdmin() {
           <div className="flex justify-end">
             <button
               onClick={saveLyrics}
-              disabled={isLoading || lyrics.length === 0}
+              disabled={isLoading || !hasUnsavedChanges}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center space-x-2"
             >
               <Save size={20} />

@@ -1,103 +1,106 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { auth, db } from '@/lib/firebase'
-import { onAuthStateChanged } from 'firebase/auth'
-import * as spotifyApi from '@/services/spotify'
+import { useState, useEffect, useCallback } from 'react'
+import { useLocalStorage } from './useLocalStorage'
 
 export function useSpotify() {
-  const [accessToken, setAccessToken] = useState<string | null>(null)
-  const [refreshToken, setRefreshToken] = useState<string | null>(null)
-  const [expiresAt, setExpiresAt] = useState<number | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [accessToken, setAccessToken] = useLocalStorage<string | null>('spotify_access_token', null)
+  const [refreshToken, setRefreshToken] = useLocalStorage<string | null>('spotify_refresh_token', null)
+  const [expiresAt, setExpiresAt] = useLocalStorage<number | null>('spotify_expires_at', null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        try {
-          // Firestore'dan token'ları al
-          const userDoc = await getDoc(doc(db, 'users', user.uid))
-          if (userDoc.exists()) {
-            const data = userDoc.data()
-            
-            // State'leri güncelle
-            setAccessToken(data.spotifyAccessToken)
-            setRefreshToken(data.spotifyRefreshToken)
-            setExpiresAt(data.spotifyTokenExpiresAt)
-            
-            // Spotify servisine token'ları kaydet
-            if (data.spotifyAccessToken) {
-              spotifyApi.setAccessToken(data.spotifyAccessToken)
-            }
-            if (data.spotifyRefreshToken) {
-              spotifyApi.setRefreshToken(data.spotifyRefreshToken)
-            }
-          }
-        } catch (error) {
-          console.error('Error loading Spotify tokens:', error)
-        }
-      } else {
-        setAccessToken(null)
-        setRefreshToken(null)
-        setExpiresAt(null)
-      }
-      setIsLoading(false)
-    })
-
-    return () => unsubscribe()
+    setIsMounted(true)
+    return () => setIsMounted(false)
   }, [])
 
-  const saveTokens = async (accessToken: string, refreshToken: string, expiresIn: number) => {
-    const user = auth.currentUser
-    if (!user) return
+  const login = useCallback((isAdmin = false) => {
+    if (!isMounted) return
 
-    const expiresAt = Date.now() + expiresIn * 1000
+    const scope = 'user-read-playback-state user-modify-playback-state'
+    const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID
+    const redirectUri = isAdmin 
+      ? process.env.NEXT_PUBLIC_SPOTIFY_ADMIN_REDIRECT_URI 
+      : process.env.NEXT_PUBLIC_SPOTIFY_REDIRECT_URI
 
-    try {
-      // Firestore'a kaydet
-      await setDoc(doc(db, 'users', user.uid), {
-        spotifyAccessToken: accessToken,
-        spotifyRefreshToken: refreshToken,
-        spotifyTokenExpiresAt: expiresAt,
-      }, { merge: true })
-
-      // State'leri güncelle
-      setAccessToken(accessToken)
-      setRefreshToken(refreshToken)
-      setExpiresAt(expiresAt)
-
-      // Spotify servisine kaydet
-      spotifyApi.setAccessToken(accessToken)
-      spotifyApi.setRefreshToken(refreshToken)
-    } catch (error) {
-      console.error('Error saving tokens:', error)
-      throw error
+    if (!clientId || !redirectUri) {
+      console.error('[useSpotify] Missing configuration:', { hasClientId: !!clientId, hasRedirectUri: !!redirectUri })
+      return
     }
-  }
-
-  const login = () => {
-    const scope = [
-      'streaming',
-      'user-read-email',
-      'user-read-private',
-      'user-read-playback-state',
-      'user-modify-playback-state',
-    ].join(' ')
 
     const params = new URLSearchParams({
+      client_id: clientId,
       response_type: 'code',
-      client_id: process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID!,
+      redirect_uri: redirectUri,
       scope,
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/spotify`,
-      state: auth.currentUser?.uid || 'anonymous',
+      show_dialog: 'true'
     })
 
-    // Client tarafında olduğumuzdan emin ol
-    if (typeof window !== 'undefined') {
-      window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`
-    }
-  }
+    window.location.href = `https://accounts.spotify.com/authorize?${params.toString()}`
+  }, [isMounted])
 
-  return { accessToken, refreshToken, expiresAt, isLoading, login, saveTokens }
+  const saveTokens = useCallback(async (accessToken: string, refreshToken: string, expiresIn: number) => {
+    const expiresAt = Date.now() + expiresIn * 1000
+    setAccessToken(accessToken)
+    setRefreshToken(refreshToken)
+    setExpiresAt(expiresAt)
+  }, [setAccessToken, setRefreshToken, setExpiresAt])
+
+  const refreshAccessToken = useCallback(async () => {
+    if (!refreshToken) return
+
+    try {
+      setIsLoading(true)
+      const response = await fetch('/api/spotify/refresh', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ refreshToken }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to refresh token')
+      }
+
+      const data = await response.json()
+      await saveTokens(data.accessToken, data.refreshToken || refreshToken, data.expiresIn)
+    } catch (error) {
+      console.error('[useSpotify] Token refresh failed:', error)
+      setAccessToken(null)
+      setRefreshToken(null)
+      setExpiresAt(null)
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [refreshToken, saveTokens, setAccessToken, setRefreshToken, setExpiresAt])
+
+  // Token'ın süresini kontrol et
+  useEffect(() => {
+    if (!accessToken || !expiresAt) return
+
+    const timeUntilExpire = expiresAt - Date.now()
+    if (timeUntilExpire <= 0) {
+      refreshAccessToken()
+    } else {
+      // Token süresinin dolmasına 5 dakika kala yenile
+      const timeout = setTimeout(() => {
+        refreshAccessToken()
+      }, timeUntilExpire - 5 * 60 * 1000)
+
+      return () => clearTimeout(timeout)
+    }
+  }, [accessToken, expiresAt, refreshAccessToken])
+
+  return {
+    accessToken: isMounted ? accessToken : null,
+    refreshToken: isMounted ? refreshToken : null,
+    expiresAt: isMounted ? expiresAt : null,
+    isLoading,
+    login,
+    saveTokens,
+    refreshAccessToken,
+  }
 } 
