@@ -152,4 +152,79 @@ export async function getCurrentTrack() {
     })
     throw new Error(`Get current track hatası: ${errorMessage}`)
   }
+}
+
+export async function previous() {
+  try {
+    const api = ensureSpotifyApi()
+    await api.skipToPrevious()
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Previous track error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Previous track hatası: ${errorMessage}`)
+  }
+}
+
+export async function next() {
+  try {
+    const api = ensureSpotifyApi()
+    await api.skipToNext()
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Next track error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Next track hatası: ${errorMessage}`)
+  }
+}
+
+export async function setVolume(volumePercent: number) {
+  try {
+    const api = ensureSpotifyApi()
+    await api.setVolume(volumePercent)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Set volume error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Set volume hatası: ${errorMessage}`)
+  }
+}
+
+export async function setShuffle(state: boolean) {
+  try {
+    const api = ensureSpotifyApi()
+    await api.setShuffle(state)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Set shuffle error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Set shuffle hatası: ${errorMessage}`)
+  }
+}
+
+export async function setRepeat(state: 'off' | 'track' | 'context') {
+  try {
+    const api = ensureSpotifyApi()
+    await api.setRepeat(state)
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Set repeat error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Set repeat hatası: ${errorMessage}`)
+  }
 } 
