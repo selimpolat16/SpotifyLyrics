@@ -22,6 +22,8 @@ export default function Home() {
 
   // Token'ları URL'den yakala
   useEffect(() => {
+    if (typeof window === 'undefined') return
+
     const accessToken = searchParams.get('access_token')
     const refreshToken = searchParams.get('refresh_token')
     const expiresIn = searchParams.get('expires_in')
