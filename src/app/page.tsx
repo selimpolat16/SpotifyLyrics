@@ -23,25 +23,33 @@ export default function Home() {
   const { accessToken, refreshToken, isLoading: spotifyLoading, login: spotifyLogin, saveTokens } = useSpotify()
   const searchParams = useSearchParams()
   const [isReady, setIsReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined' || !searchParams) return
 
-    const accessToken = searchParams.get('access_token')
-    const refreshToken = searchParams.get('refresh_token')
-    const expiresIn = searchParams.get('expires_in')
-    const error = searchParams.get('error')
+    try {
+      const accessToken = searchParams.get('access_token')
+      const refreshToken = searchParams.get('refresh_token')
+      const expiresIn = searchParams.get('expires_in')
+      const errorParam = searchParams.get('error')
 
-    if (error) {
-      console.error('Spotify auth error:', error)
-      return
+      if (errorParam) {
+        console.error('Spotify auth error:', errorParam)
+        setError('Spotify girişi başarısız oldu')
+        return
+      }
+
+      if (accessToken && refreshToken && expiresIn) {
+        saveTokens(accessToken, refreshToken, parseInt(expiresIn))
+        setError(null)
+      }
+
+      setIsReady(true)
+    } catch (err) {
+      console.error('Error processing auth params:', err)
+      setError('Bir hata oluştu')
     }
-
-    if (accessToken && refreshToken && expiresIn) {
-      saveTokens(accessToken, refreshToken, parseInt(expiresIn))
-    }
-
-    setIsReady(true)
   }, [searchParams, saveTokens])
 
   if (!isReady || spotifyLoading) {
@@ -61,6 +69,9 @@ export default function Home() {
             <p className="text-gray-400 mb-8">
               Spotify'da çalan şarkıların sözlerini gerçek zamanlı görüntüleyin
             </p>
+            {error && (
+              <p className="text-red-500 mb-4">{error}</p>
+            )}
             <button
               onClick={() => spotifyLogin(false)}
               className="px-8 py-3 bg-[#1DB954] text-white rounded-full hover:bg-[#1DB954]/90 font-semibold text-lg"
