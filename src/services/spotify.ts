@@ -137,4 +137,19 @@ export async function getAudioFeatures(trackId: string) {
     // Genel hata mesajı
     throw new Error(`Spotify API hatası: ${errorInfo.message}`)
   }
+}
+
+export async function getCurrentTrack() {
+  try {
+    const playbackState = await getPlaybackState()
+    return playbackState
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Get current track error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Get current track hatası: ${errorMessage}`)
+  }
 } 
