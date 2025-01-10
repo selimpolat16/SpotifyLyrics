@@ -80,6 +80,4 @@ npm run dev
 
 MIT
 
-## 👥 Katkıda Bulunanlar
 
-- [Your Name](https://github.com/yourusername) 
