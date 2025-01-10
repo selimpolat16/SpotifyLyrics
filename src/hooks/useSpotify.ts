@@ -31,11 +31,19 @@ export function useSpotify() {
       'user-modify-playback-state',
       'user-read-currently-playing',
       'streaming',
+      'app-remote-control',
+      'playlist-read-private',
+      'playlist-read-collaborative',
+      'playlist-modify-public',
+      'playlist-modify-private',
       'user-read-email',
       'user-read-private',
       'user-library-read',
+      'user-library-modify',
       'user-top-read',
-      'user-read-recently-played'
+      'user-read-recently-played',
+      'user-follow-read',
+      'user-follow-modify'
     ].join(' ')
 
     const clientId = process.env.NEXT_PUBLIC_SPOTIFY_CLIENT_ID

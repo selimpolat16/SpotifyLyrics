@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useSpotify } from '@/hooks/useSpotify'
 import dynamicImport from 'next/dynamic'
+import Player from '@/components/Player'
 
 // Route segment config
 export const dynamic = 'force-dynamic'
@@ -53,26 +54,32 @@ export default function Home() {
 
   if (!accessToken || !refreshToken) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold text-white mb-8">Spotify Lyrics</h1>
-          <p className="text-gray-400 mb-8">
-            Spotify'da çalan şarkıların sözlerini gerçek zamanlı görüntüleyin
-          </p>
-          <button
-            onClick={() => spotifyLogin(false)}
-            className="px-8 py-3 bg-[#1DB954] text-white rounded-full hover:bg-[#1DB954]/90 font-semibold text-lg"
-          >
-            Spotify ile Bağlan
-          </button>
+      <>
+        <div className="min-h-screen flex items-center justify-center bg-black">
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-bold text-white mb-8">Spotify Lyrics</h1>
+            <p className="text-gray-400 mb-8">
+              Spotify'da çalan şarkıların sözlerini gerçek zamanlı görüntüleyin
+            </p>
+            <button
+              onClick={() => spotifyLogin(false)}
+              className="px-8 py-3 bg-[#1DB954] text-white rounded-full hover:bg-[#1DB954]/90 font-semibold text-lg"
+            >
+              Spotify ile Bağlan
+            </button>
+          </div>
         </div>
-      </div>
+        <Player onTrackChange={() => {}} />
+      </>
     )
   }
 
   return (
-    <main className="min-h-screen bg-black">
-      <Lyrics />
-    </main>
+    <>
+      <main className="min-h-screen bg-black">
+        <Lyrics />
+      </main>
+      <Player onTrackChange={() => {}} />
+    </>
   )
 }

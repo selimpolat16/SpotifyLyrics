@@ -41,25 +41,39 @@ export default function Player({ onTrackChange }: PlayerProps) {
   const [repeat, setRepeat] = useState<'off' | 'track' | 'context'>('off')
   const [isPremium, setIsPremium] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [hasActiveDevice, setHasActiveDevice] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
-    if (!accessToken) return
+    setIsMounted(true)
+  }, [])
 
-    const checkPremium = async () => {
+  useEffect(() => {
+    if (!accessToken || !isMounted) return
+
+    const checkPremiumAndDevice = async () => {
       try {
         const profile = await spotifyApi.getCurrentUserProfile()
         setIsPremium(profile.product === 'premium')
+
+        const playbackState = await spotifyApi.getPlaybackState()
+        setHasActiveDevice(!!playbackState?.device)
+
+        if (!playbackState?.device) {
+          setError('Lütfen Spotify\'ı bir cihazda açın ve çalmaya başlayın')
+        }
       } catch (error) {
-        console.error('Error checking premium status:', error)
+        console.error('Error checking status:', error)
         setIsPremium(false)
+        setHasActiveDevice(false)
       }
     }
 
-    checkPremium()
-  }, [accessToken])
+    checkPremiumAndDevice()
+  }, [accessToken, isMounted])
 
   useEffect(() => {
-    if (!accessToken) return
+    if (!accessToken || !isMounted) return
 
     const fetchCurrentTrack = async () => {
       try {
@@ -81,11 +95,20 @@ export default function Player({ onTrackChange }: PlayerProps) {
     const interval = setInterval(fetchCurrentTrack, 1000)
 
     return () => clearInterval(interval)
-  }, [accessToken])
+  }, [accessToken, isMounted])
+
+  if (!isMounted) {
+    return null
+  }
 
   const handlePlayPause = async () => {
     if (!isPremium) {
       setError('Bu özellik için Spotify Premium gereklidir')
+      return
+    }
+
+    if (!hasActiveDevice) {
+      setError('Lütfen Spotify\'ı bir cihazda açın ve çalmaya başlayın')
       return
     }
 
@@ -204,27 +227,33 @@ export default function Player({ onTrackChange }: PlayerProps) {
     }
   }
 
-  if (!currentTrack?.item) return null
-
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-lg border-t border-border">
       <div className="container mx-auto h-20 flex items-center justify-between px-4">
         {/* Track Info */}
         <div className="flex items-center space-x-4 w-1/4">
-          <div className="relative w-14 h-14 rounded-md overflow-hidden">
-            <Image
-              src={currentTrack.item.album.images[0]?.url || '/placeholder.png'}
-              alt={currentTrack.item.name}
-              fill
-              className="object-cover"
-            />
-          </div>
-          <div className="min-w-0">
-            <h3 className="font-medium text-sm truncate">{currentTrack.item.name}</h3>
-            <p className="text-xs text-muted-foreground truncate">
-              {currentTrack.item.artists.map(artist => artist.name).join(', ')}
-            </p>
-          </div>
+          {currentTrack?.item ? (
+            <>
+              <div className="relative w-14 h-14 rounded-md overflow-hidden">
+                <Image
+                  src={currentTrack.item.album.images[0]?.url || '/placeholder.png'}
+                  alt={currentTrack.item.name}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div className="min-w-0">
+                <h3 className="font-medium text-sm truncate">{currentTrack.item.name}</h3>
+                <p className="text-xs text-muted-foreground truncate">
+                  {currentTrack.item.artists.map(artist => artist.name).join(', ')}
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Spotify'da bir şarkı çalmaya başlayın
+            </div>
+          )}
         </div>
 
         {/* Playback Controls */}
@@ -283,7 +312,7 @@ export default function Player({ onTrackChange }: PlayerProps) {
               <input
                 type="range"
                 min={0}
-                max={duration}
+                max={duration || 1}
                 value={progress}
                 onChange={handleSeek}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
@@ -292,7 +321,7 @@ export default function Player({ onTrackChange }: PlayerProps) {
               <div className="absolute inset-0 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full bg-white group-hover:bg-primary transition-colors"
-                  style={{ width: `${(progress / duration) * 100}%` }}
+                  style={{ width: `${duration ? (progress / duration) * 100 : 0}%` }}
                 />
               </div>
             </div>
