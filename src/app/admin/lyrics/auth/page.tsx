@@ -4,6 +4,10 @@ import { useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useSpotify } from '@/hooks/useSpotify'
 
+// Route segment config
+export const dynamic = 'force-dynamic'
+export const runtime = 'edge'
+
 export default function SpotifyAuthHandler() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -11,6 +15,8 @@ export default function SpotifyAuthHandler() {
 
   useEffect(() => {
     const handleAuth = async () => {
+      if (typeof window === 'undefined') return
+
       try {
         const accessToken = searchParams.get('access_token')
         const refreshToken = searchParams.get('refresh_token')
@@ -30,9 +36,7 @@ export default function SpotifyAuthHandler() {
       }
     }
 
-    if (typeof window !== 'undefined') {
-      handleAuth()
-    }
+    handleAuth()
   }, [router, searchParams, saveTokens])
 
   return (
