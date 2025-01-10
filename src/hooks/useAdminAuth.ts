@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, getIdToken } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
+import Cookies from 'js-cookie'
 
 export function useAdminAuth() {
   const router = useRouter()
@@ -14,18 +15,22 @@ export function useAdminAuth() {
       return
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Admin rolünü kontrol et (örneğin custom claims veya email ile)
-        if (user.email?.endsWith('@admin.com')) {
+        try {
+          // Yeni token al
+          const token = await getIdToken(user, true)
+          // Token'ı cookie'ye kaydet
+          Cookies.set('auth_token', token, { expires: 7 })
           setIsAuthenticated(true)
-        } else {
-          // Admin değilse çıkış yaptır
-          auth.signOut()
+        } catch (error) {
+          console.error('Token alma hatası:', error)
           setIsAuthenticated(false)
           router.push('/admin/login')
         }
       } else {
+        // Cookie'yi temizle
+        Cookies.remove('auth_token')
         setIsAuthenticated(false)
         router.push('/admin/login')
       }

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '@/lib/firebase'
 import { useRouter } from 'next/navigation'
+import Cookies from 'js-cookie'
 
 export default function AdminLogin() {
   const router = useRouter()
@@ -18,17 +19,35 @@ export default function AdminLogin() {
     setIsLoading(true)
 
     try {
-      console.log('Giriş denemesi:', { email, password: '***' }) // Debug log
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
-      console.log('Giriş başarılı:', userCredential.user.email) // Debug log
+      console.log('Giriş başarılı:', userCredential.user.email)
+      
+      // Firebase token'ını al
+      const token = await userCredential.user.getIdToken()
+      
+      // Token'ı cookie'ye kaydet (7 gün geçerli)
+      Cookies.set('auth_token', token, { expires: 7 })
+      
+      // Yönlendirme yap
       router.push('/admin/lyrics')
+      router.refresh()
     } catch (error: any) {
-      console.error('Giriş hatası:', error.code, error.message) // Debug log
-      setError(
-        error.code === 'auth/invalid-credential'
-          ? 'E-posta veya şifre hatalı'
-          : 'Giriş yapılırken bir hata oluştu'
-      )
+      console.error('Giriş hatası:', error.code, error.message)
+      
+      // Daha detaylı hata mesajları
+      if (error.code === 'auth/invalid-credential') {
+        setError('E-posta veya şifre hatalı')
+      } else if (error.code === 'auth/invalid-email') {
+        setError('Geçersiz e-posta adresi')
+      } else if (error.code === 'auth/user-disabled') {
+        setError('Bu hesap devre dışı bırakılmış')
+      } else if (error.code === 'auth/user-not-found') {
+        setError('Bu e-posta adresi ile kayıtlı kullanıcı bulunamadı')
+      } else if (error.code === 'auth/wrong-password') {
+        setError('Hatalı şifre')
+      } else {
+        setError('Giriş yapılırken bir hata oluştu: ' + error.message)
+      }
     } finally {
       setIsLoading(false)
     }

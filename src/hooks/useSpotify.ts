@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useLocalStorage } from './useLocalStorage'
+import * as spotifyApi from '@/services/spotify'
 
 export function useSpotify() {
   const [accessToken, setAccessToken] = useLocalStorage<string | null>('spotify_access_token', null)
@@ -14,6 +15,13 @@ export function useSpotify() {
     setIsMounted(true)
     return () => setIsMounted(false)
   }, [])
+
+  // Token değiştiğinde Spotify API'yi initialize et
+  useEffect(() => {
+    if (accessToken) {
+      spotifyApi.initializeSpotify(accessToken)
+    }
+  }, [accessToken])
 
   const login = useCallback((isAdmin = false) => {
     if (!isMounted) return
