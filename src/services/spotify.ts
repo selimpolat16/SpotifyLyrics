@@ -45,4 +45,14 @@ export async function pause() {
     console.error('[spotify] Playback control error:', error)
     throw error
   }
+}
+
+export async function seek(positionMs: number) {
+  try {
+    const api = ensureSpotifyApi()
+    await api.seek(positionMs)
+  } catch (error) {
+    console.error('[spotify] Seek error:', error)
+    throw error
+  }
 } 
