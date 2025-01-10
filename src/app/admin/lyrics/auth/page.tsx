@@ -17,7 +17,9 @@ export default function SpotifyAuthHandler() {
         const expiresIn = searchParams.get('expires_in')
 
         if (!accessToken || !refreshToken || !expiresIn) {
-          throw new Error('Missing auth parameters')
+          console.error('Missing auth parameters')
+          router.push('/admin/lyrics?error=missing_params')
+          return
         }
 
         await saveTokens(accessToken, refreshToken, parseInt(expiresIn))
@@ -28,7 +30,9 @@ export default function SpotifyAuthHandler() {
       }
     }
 
-    handleAuth()
+    if (typeof window !== 'undefined') {
+      handleAuth()
+    }
   }, [router, searchParams, saveTokens])
 
   return (
