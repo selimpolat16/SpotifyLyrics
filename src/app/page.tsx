@@ -3,10 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useSpotify } from '@/hooks/useSpotify'
-import dynamic from 'next/dynamic'
+import dynamicImport from 'next/dynamic'
 
-// Client-side only import
-const Lyrics = dynamic(() => import('@/components/Lyrics'), {
+// Route segment config
+export const dynamic = 'force-dynamic'
+export const runtime = 'edge'
+
+const Lyrics = dynamicImport(() => import('@/components/Lyrics'), {
   ssr: false,
   loading: () => (
     <div className="flex items-center justify-center h-screen bg-black/90">
@@ -20,7 +23,6 @@ export default function Home() {
   const searchParams = useSearchParams()
   const [isReady, setIsReady] = useState(false)
 
-  // Token'ları URL'den yakala
   useEffect(() => {
     if (typeof window === 'undefined') return
 
