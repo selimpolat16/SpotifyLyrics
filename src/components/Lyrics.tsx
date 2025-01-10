@@ -168,18 +168,26 @@ const LyricsComponent = () => {
             await loadLyrics(track)
           }
         }
-      } catch (error: any) {
+      } catch (error) {
+        // Hata mesajını güvenli bir şekilde kontrol et
+        const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+        
         // Token süresi dolduysa yenilemeyi dene
-        if (error.message?.includes('The access token expired')) {
+        if (errorMessage.includes('The access token expired')) {
           try {
             await refreshAccessToken()
           } catch (refreshError) {
             setError('Oturum süresi doldu. Lütfen sayfayı yenileyin.')
           }
-        } else if (error.message?.includes('No token provided')) {
+        } else if (errorMessage.includes('No token provided')) {
           // Token henüz hazır değil, sessizce geç
           return
         } else {
+          console.error('Playback state hatası:', {
+            error,
+            message: errorMessage,
+            stack: error instanceof Error ? error.stack : undefined
+          })
           setError('Şarkı bilgileri alınamadı')
         }
       }

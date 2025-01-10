@@ -22,8 +22,13 @@ export async function getPlaybackState() {
     const response = await api.getMyCurrentPlaybackState()
     return response.body
   } catch (error) {
-    console.error('[spotify] Playback state error:', error)
-    throw error
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Playback state error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Playback state hatası: ${errorMessage}`)
   }
 }
 
@@ -32,8 +37,13 @@ export async function play(options?: { uris?: string[] }) {
     const api = ensureSpotifyApi()
     await api.play(options)
   } catch (error) {
-    console.error('[spotify] Playback control error:', error)
-    throw error
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Playback control error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Playback control hatası: ${errorMessage}`)
   }
 }
 
@@ -42,8 +52,13 @@ export async function pause() {
     const api = ensureSpotifyApi()
     await api.pause()
   } catch (error) {
-    console.error('[spotify] Playback control error:', error)
-    throw error
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Playback control error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Playback control hatası: ${errorMessage}`)
   }
 }
 
@@ -52,8 +67,13 @@ export async function seek(positionMs: number) {
     const api = ensureSpotifyApi()
     await api.seek(positionMs)
   } catch (error) {
-    console.error('[spotify] Seek error:', error)
-    throw error
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen hata'
+    console.error('[spotify] Seek error:', {
+      error,
+      message: errorMessage,
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    throw new Error(`Seek hatası: ${errorMessage}`)
   }
 }
 
