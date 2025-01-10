@@ -8,53 +8,50 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { LyricLine } from '@/types/lyrics'
 import { FastAverageColor } from 'fast-average-color'
 import dynamic from 'next/dynamic'
+import gsap from 'gsap'
+import { ScrollTrigger } from 'gsap/dist/ScrollTrigger'
+import { TextPlugin } from 'gsap/dist/TextPlugin'
 
-// Animasyon stilleri
+// GSAP pluginlerini kaydet
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger, TextPlugin)
+}
+
+// Framer Motion animasyon stilleri
 const animationStyles = {
   fade: {
-    initial: { opacity: 0.5, y: 20 },
+    initial: { opacity: 0 },
     animate: (isCurrentLine: boolean) => ({ 
-      opacity: isCurrentLine ? 1 : 0.5,
-      y: 0,
-      scale: isCurrentLine ? 1.05 : 1
+      opacity: isCurrentLine ? 1 : 0.5
     }),
     transition: { 
-      duration: 0.5,
-      scale: {
-        type: "spring",
-        stiffness: 200,
-        damping: 15
-      }
+      duration: 0.2
     }
   },
   slide: {
-    initial: { opacity: 0.5, x: -50 },
+    initial: { opacity: 0, x: -10 },
     animate: (isCurrentLine: boolean) => ({ 
       opacity: isCurrentLine ? 1 : 0.5,
-      x: 0,
-      scale: isCurrentLine ? 1.05 : 1
+      x: 0
     }),
     transition: { 
-      duration: 0.5,
-      scale: {
-        type: "spring",
-        stiffness: 200,
-        damping: 15
-      }
+      duration: 0.2
     }
   },
   pop: {
-    initial: { opacity: 0.5, scale: 0.9 },
+    initial: { opacity: 0 },
     animate: (isCurrentLine: boolean) => ({ 
-      opacity: isCurrentLine ? 1 : 0.5,
-      scale: isCurrentLine ? 1.1 : 1
+      opacity: isCurrentLine ? 1 : 0.5
     }),
     transition: { 
-      type: "spring",
-      stiffness: 400,
-      damping: 25
+      duration: 0.2
     }
   }
+}
+
+// GSAP ease değerleri
+const gsapEase = {
+  smooth: "none"
 }
 
 // Font seçenekleri
@@ -132,6 +129,11 @@ const LyricsComponent = () => {
   const [selectedAnimation, setSelectedAnimation] = useState<keyof typeof animationStyles>('fade')
   const lyricsRef = useRef<HTMLDivElement>(null)
   const [fac, setFac] = useState<FastAverageColor | null>(null)
+
+  // GSAP animasyonları için ref'ler
+  const headerRef = useRef<HTMLDivElement>(null)
+  const albumImageRef = useRef<HTMLImageElement>(null)
+  const noLyricsRef = useRef<HTMLDivElement>(null)
 
   // Client-side mount kontrolü
   useEffect(() => {
@@ -248,25 +250,17 @@ const LyricsComponent = () => {
     }
 
     const currentLine = findCurrentLine(lyrics, progress)
-    if (currentLine) {
+    if (currentLine && currentLine !== findCurrentLine(lyrics, progress - 1000)) {
       setCurrentLine(currentLine)
 
       // Otomatik kaydırma - sadece büyük zaman farklarında yap
       if (lyricsRef.current) {
         const lineElement = document.getElementById(`line-${currentLine.time}`)
         if (lineElement) {
-          const container = lyricsRef.current
-          const elementRect = lineElement.getBoundingClientRect()
-          const containerRect = container.getBoundingClientRect()
-          
-          // Eğer element görünür alanda değilse veya çok kenardaysa kaydır
-          if (elementRect.top < containerRect.top + 100 || 
-              elementRect.bottom > containerRect.bottom - 100) {
-            lineElement.scrollIntoView({
-              behavior: 'smooth',
-              block: 'center'
-            })
-          }
+          lineElement.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+          })
         }
       }
     }
@@ -370,6 +364,56 @@ const LyricsComponent = () => {
     }
   }
 
+  // GSAP animasyonlarını başlat
+  useEffect(() => {
+    if (!isMounted) return
+
+    // Header animasyonu
+    if (headerRef.current && albumImageRef.current) {
+      gsap.fromTo(headerRef.current,
+        { y: -20, opacity: 0 },
+        { 
+          y: 0, 
+          opacity: 1, 
+          duration: 0.3,
+          ease: gsapEase.elastic
+        }
+      )
+
+      gsap.fromTo(albumImageRef.current,
+        { scale: 0.9, opacity: 0 },
+        { 
+          scale: 1,
+          opacity: 1,
+          duration: 0.3,
+          ease: gsapEase.elastic
+        }
+      )
+    }
+
+    // Sözler yoksa animasyon
+    if (noLyricsRef.current) {
+      gsap.fromTo(noLyricsRef.current,
+        { y: 20, opacity: 0 },
+        { 
+          y: 0,
+          opacity: 1,
+          duration: 0.3,
+          ease: gsapEase.back
+        }
+      )
+    }
+
+  }, [isMounted, currentTrack?.id])
+
+  // Şarkı değiştiğinde renk geçişi animasyonu
+  useEffect(() => {
+    if (!isMounted || !backgroundColor) return
+
+    document.body.style.background = `linear-gradient(to bottom, ${backgroundColor}, rgba(0, 0, 0, 0.95))`
+
+  }, [isMounted, backgroundColor])
+
   // Loading state for initial render
   if (!isMounted) {
     return null // Return null initially to prevent hydration mismatch
@@ -397,7 +441,7 @@ const LyricsComponent = () => {
         }}
       >
         {currentTrack && (
-          <div className="text-center max-w-lg mx-auto p-6">
+          <div ref={noLyricsRef} className="text-center max-w-lg mx-auto p-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -429,72 +473,34 @@ const LyricsComponent = () => {
 
   return (
     <div 
-      className="fixed inset-0 transition-colors duration-1000 ease-in-out overflow-hidden"
+      className="fixed inset-0 overflow-hidden"
       style={{ 
-        background: `linear-gradient(to bottom, ${backgroundColor}, rgba(0, 0, 0, 0.95))`,
+        background: `linear-gradient(to bottom, ${backgroundColor}, rgba(0, 0, 0, 0.95))`
       }}
     >
-      {/* Ayarlar Paneli */}
       {/* Şarkı Bilgisi */}
       {currentTrack && (
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <div 
           className="fixed top-0 left-0 right-0 bg-black/40 backdrop-blur-lg border-b border-white/10 p-4 z-10"
         >
           <div className="container mx-auto flex items-center space-x-4">
-            <motion.img
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+            <img
               src={currentTrack.album.images[0]?.url}
               alt={currentTrack.name}
               className="w-16 h-16 rounded-lg shadow-lg cursor-pointer hover:opacity-80 transition-opacity"
               onClick={() => setShowZoomedCover(true)}
             />
             <div>
-              <motion.h2 
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                className="font-semibold text-white"
-              >
+              <h2 className="font-semibold text-white">
                 {currentTrack.name}
-              </motion.h2>
-              <motion.p 
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 }}
-                className="text-white/60"
-              >
+              </h2>
+              <p className="text-white/60">
                 {currentTrack.artists.map(a => a.name).join(', ')}
-              </motion.p>
+              </p>
             </div>
           </div>
-        </motion.div>
+        </div>
       )}
-
-      {/* Büyütülmüş Albüm Kapağı */}
-      <AnimatePresence>
-        {showZoomedCover && currentTrack && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 backdrop-blur-lg z-50 flex items-center justify-center"
-            onClick={() => setShowZoomedCover(false)}
-          >
-            <motion.img
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.8 }}
-              transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              src={currentTrack.album.images[0]?.url}
-              alt={currentTrack.name}
-              className="max-w-[80vw] max-h-[80vh] rounded-lg shadow-2xl"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Sözler */}
       <div 
@@ -505,30 +511,24 @@ const LyricsComponent = () => {
           className="container mx-auto px-4 py-4"
         >
           <div className={`max-w-2xl mx-auto space-y-8 ${selectedFont.value}`}>
-            <AnimatePresence>
-              {lyrics.map((line) => {
-                const isCurrentLine = currentLine?.time === line.time
-                const animation = animationStyles[selectedAnimation]
-                
-                return (
-                  <motion.div
-                    key={line.time}
-                    id={`line-${line.time}`}
-                    initial={animation.initial}
-                    animate={animation.animate(isCurrentLine)}
-                    transition={animation.transition}
-                    onClick={() => handleSeek(line.time)}
-                    className={`text-center text-2xl transition-all backdrop-blur-sm rounded-lg p-2 cursor-pointer hover:bg-white/5 ${
-                      isCurrentLine
-                        ? 'text-white font-semibold'
-                        : 'text-white/50'
-                    }`}
-                  >
-                    {line.text}
-                  </motion.div>
-                )
-              })}
-            </AnimatePresence>
+            {lyrics.map((line) => {
+              const isCurrentLine = currentLine?.time === line.time
+              
+              return (
+                <div
+                  key={line.time}
+                  id={`line-${line.time}`}
+                  onClick={() => handleSeek(line.time)}
+                  className={`text-center text-2xl transition-opacity duration-200 rounded-lg p-2 cursor-pointer hover:bg-white/5 ${
+                    isCurrentLine
+                      ? 'text-white font-semibold opacity-100'
+                      : 'text-white/50 opacity-50'
+                  }`}
+                >
+                  {line.text}
+                </div>
+              )
+            })}
           </div>
         </div>
       </div>
