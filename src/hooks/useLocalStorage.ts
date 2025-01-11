@@ -16,31 +16,23 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
     }
   })
 
-  const updateLocalStorage = useCallback((value: T) => {
+  const setValue = useCallback((value: T | ((val: T) => T)) => {
     try {
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(key, JSON.stringify(value))
-      }
+      setStoredValue(prev => {
+        const valueToStore = value instanceof Function ? value(prev) : value
+        
+        if (JSON.stringify(valueToStore) !== JSON.stringify(prev)) {
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(key, JSON.stringify(valueToStore))
+          }
+          return valueToStore
+        }
+        return prev
+      })
     } catch (error) {
       console.error('Local storage error:', error)
     }
   }, [key])
-
-  useEffect(() => {
-    updateLocalStorage(storedValue)
-  }, [storedValue, updateLocalStorage])
-
-  const setValue = useCallback((value: T | ((val: T) => T)) => {
-    try {
-      const valueToStore = value instanceof Function ? value(storedValue) : value
-      
-      if (JSON.stringify(valueToStore) !== JSON.stringify(storedValue)) {
-        setStoredValue(valueToStore)
-      }
-    } catch (error) {
-      console.error('Local storage error:', error)
-    }
-  }, [storedValue])
 
   return [storedValue, setValue] as const
 } 
