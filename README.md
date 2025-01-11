@@ -74,11 +74,6 @@ npm run dev
 3. Spotify'da bir şarkı çalmaya başlayın
 4. Şarkı sözleri otomatik olarak görüntülenecektir
 
-### Admin Paneli
-
-1. `/admin/lyrics` adresine gidin
-2. Admin hesabınızla giriş yapın
-3. Şarkı sözlerini ekleyin veya düzenleyin
 
 ## 📄 Lisans
 
