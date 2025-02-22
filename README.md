@@ -77,6 +77,6 @@ npm run dev
 
 ## 📄 Lisans
 
-MIT
+MIT Licence
 
 
